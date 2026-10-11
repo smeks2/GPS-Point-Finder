@@ -50,12 +50,13 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: GPS-Point-Finder-v2
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+        run: |
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          unset ANDROID_SDK_ROOT
+          rm -f local.properties
+          gradle assembleDebug --no-daemon --stacktrace
+        env:
+          ANDROID_HOME: /home/runner/android-sdk
+          ANDROID_SDK_ROOT: /home/runner/android-sdk
