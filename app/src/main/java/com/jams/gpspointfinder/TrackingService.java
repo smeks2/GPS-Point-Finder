@@ -31,10 +31,11 @@ public class TrackingService extends Service implements LocationListener {
   try{String previousTrack=getSharedPreferences("track",MODE_PRIVATE).getString("latest","[]");track=new JSONArray(previousTrack);}catch(Exception ignored){}
   try{startForeground(42,note("GPS sedang bermula..."),ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
    if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){stopSelf();return START_NOT_STICKY;}
+   if(!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)){stopSelf();return START_NOT_STICKY;}
    lm.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0,this);h.removeCallbacks(ticker);h.post(ticker);
   }catch(Exception e){running=false;saveMode();stopSelf();return START_NOT_STICKY;}
  }
- if(!findEnabled){filtered=Float.NaN;oldDist=Float.NaN;}
+ if(!findEnabled||Double.isNaN(lat)){filtered=Float.NaN;oldDist=Float.NaN;}
  saveMode();
  ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(42,note("Rekod "+(recording?"ON":"OFF")+" | Find "+(findEnabled?"ON":"OFF")+" | Beep "+(beepEnabled?"ON":"OFF")));
  return START_STICKY;
