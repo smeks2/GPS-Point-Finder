@@ -62,6 +62,25 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
   @Override public void draw(Canvas canvas,MapView map,boolean shadow){
    if(shadow)return;
    android.graphics.Point pixel=new android.graphics.Point();
+   // Live straight-line guide to the active target; not a walkable route.
+   // Draw before markers so the target and user remain clearly visible.
+   if(!Double.isNaN(curLat)&&!Double.isNaN(curLon)&&!Double.isNaN(targetLat)&&!Double.isNaN(targetLon)){
+    android.graphics.Point from=new android.graphics.Point(),to=new android.graphics.Point();
+    map.getProjection().toPixels(new GeoPoint(curLat,curLon),from);
+    map.getProjection().toPixels(new GeoPoint(targetLat,targetLon),to);
+    paint.setStyle(Paint.Style.STROKE);
+    paint.setStrokeWidth(7f);
+    paint.setStrokeCap(Paint.Cap.ROUND);
+    paint.setColor(Color.WHITE);
+    paint.setPathEffect(null);
+    canvas.drawLine(from.x,from.y,to.x,to.y,paint);
+    paint.setStrokeWidth(5f);
+    paint.setColor(Color.rgb(0,156,215));
+    paint.setPathEffect(new android.graphics.DashPathEffect(new float[]{16f,11f},0f));
+    canvas.drawLine(from.x,from.y,to.x,to.y,paint);
+    paint.setPathEffect(null);
+    paint.setStyle(Paint.Style.FILL);
+   }
    if(!Double.isNaN(targetLat)&&!Double.isNaN(targetLon)){
     map.getProjection().toPixels(new GeoPoint(targetLat,targetLon),pixel);
     paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(210,44,54));
