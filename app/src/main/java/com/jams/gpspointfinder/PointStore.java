@@ -4,7 +4,7 @@ public class PointStore {
  private final android.content.SharedPreferences prefs;
  PointStore(Context c){prefs=c.getSharedPreferences("points_v3",Context.MODE_PRIVATE);}
  JSONArray points(){try{return new JSONArray(prefs.getString("points","[]"));}catch(Exception e){return new JSONArray();}}
- void add(String name,double lat,double lon,float accuracy){try{JSONArray a=points();JSONObject o=new JSONObject();o.put("name",name);o.put("lat",lat);o.put("lon",lon);o.put("accuracy",accuracy);o.put("time",System.currentTimeMillis());o.put("status","Belum Cari");a.put(o);prefs.edit().putString("points",a.toString()).apply();}catch(Exception ignored){}}
+ boolean add(String name,double lat,double lon,float accuracy){try{JSONArray a=points();JSONObject o=new JSONObject();o.put("name",name);o.put("lat",lat);o.put("lon",lon);if(Float.isNaN(accuracy)||Float.isInfinite(accuracy))o.put("accuracy",JSONObject.NULL);else o.put("accuracy",accuracy);o.put("time",System.currentTimeMillis());o.put("status","Belum Cari");a.put(o);return prefs.edit().putString("points",a.toString()).commit();}catch(Exception e){return false;}}
  void setStatus(int index,String status){try{JSONArray a=points();JSONObject o=a.optJSONObject(index);if(o==null)return;o.put("status",status);o.put("checkedAt",System.currentTimeMillis());prefs.edit().putString("points",a.toString()).apply();}catch(Exception ignored){}}
  void remove(int index){JSONArray old=points(),out=new JSONArray();for(int i=0;i<old.length();i++)if(i!=index)out.put(old.optJSONObject(i));prefs.edit().putString("points",out.toString()).apply();}
 }
