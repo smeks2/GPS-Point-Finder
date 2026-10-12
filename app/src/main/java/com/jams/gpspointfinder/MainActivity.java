@@ -1,14 +1,14 @@
 package com.jams.gpspointfinder;
 import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.*;import android.graphics.*;import android.hardware.*;import android.location.*;import android.os.*;import android.view.*;import android.widget.*;import org.json.*;import java.util.*;import java.util.regex.*;import org.osmdroid.config.Configuration;import org.osmdroid.tileprovider.tilesource.TileSourceFactory;import org.osmdroid.views.MapView;import org.osmdroid.views.overlay.Marker;import org.osmdroid.views.overlay.Polyline;import org.osmdroid.util.GeoPoint;import org.osmdroid.views.overlay.Overlay;
 public class MainActivity extends Activity implements SensorEventListener,LocationListener {
- LinearLayout page;TextView metrics,status,modeStatus,markProgressLabel;ProgressBar markProgress;Spinner markType;Button findButton,recordButton,beepButton;boolean findOn=false,recordOn=false,beepOn=false;EditText coords,name;Spinner saved;MapView realMap;Marker targetMarker,userMarker;Polyline routeLine;boolean mapCentered=false,followGps=true;Overlay navigationOverlay;SensorManager sm;Sensor rotation;LocationManager lm;PointStore store;
+ LinearLayout page;TextView metrics,status,modeStatus,markProgressLabel;ProgressBar markProgress;Spinner markType;Button findButton,recordButton,beepButton;boolean findOn=false,recordOn=false,beepOn=false;EditText coords,name;Spinner saved;MapView realMap;Marker targetMarker,userMarker;Polyline routeLine;boolean mapCentered=false,followGps=true,headingUp=true;float mapHeading=Float.NaN;long lastMapRotation=0;Overlay navigationOverlay;SensorManager sm;Sensor rotation;LocationManager lm;PointStore store;
  double targetLat=Double.NaN,targetLon=Double.NaN,heading=Double.NaN,curLat=Double.NaN,curLon=Double.NaN;float bearing=Float.NaN,course=Float.NaN,accuracy=Float.NaN,distance=-1,total=0;double altitude=Double.NaN;
  boolean measuring=false;boolean liveGpsSubscribed=false;long lastGpsFix=0;long started=0;ArrayList<Location> samples=new ArrayList<>();Handler handler=new Handler(Looper.getMainLooper());
  final BroadcastReceiver updates=new BroadcastReceiver(){public void onReceive(Context c,Intent i){curLat=i.getDoubleExtra("lat",Double.NaN);curLon=i.getDoubleExtra("lon",Double.NaN);bearing=i.getFloatExtra("bearing",Float.NaN);course=i.getFloatExtra("course",Float.NaN);accuracy=i.getFloatExtra("accuracy",Float.NaN);distance=i.getFloatExtra("distance",-1);altitude=i.getDoubleExtra("altitude",Double.NaN);total=i.getFloatExtra("total",0);lastGpsFix=SystemClock.elapsedRealtime();render();updateMap();refreshModes();}};
  @Override public void onCreate(Bundle b){super.onCreate(b);store=new PointStore(this);sm=(SensorManager)getSystemService(SENSOR_SERVICE);rotation=sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);lm=(LocationManager)getSystemService(LOCATION_SERVICE);
  Configuration.getInstance().load(this,getSharedPreferences("osmdroid",MODE_PRIVATE));Configuration.getInstance().setUserAgentValue(getPackageName());
  ScrollView scroll=new ScrollView(this);page=new LinearLayout(this);page.setPadding(22,22,22,22);page.setOrientation(1);page.setBackgroundColor(Color.rgb(239,245,242));scroll.addView(page);setContentView(scroll);
- label("GPS POINT FINDER PRO v3.4.1 LIVE ARROW BETA",22);label("OFFLINE • MARK 60s • FIND • TRACK",14);
+ label("GPS POINT FINDER PRO v3.4.2 HEADING-UP BETA",22);label("OFFLINE • MARK 60s • FIND • TRACK",14);
  name=new EditText(this);name.setHint("Nama batu / titik (contoh: Batu 01)");page.addView(name);
  markType=new Spinner(this);markType.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"START — Lokasi mula","CHECKPOINT — Persinggahan","BOUNDARY — Batu sempadan","END — Lokasi akhir"}));page.addView(markType);
  markProgressLabel=label("MARK POINT: Sedia • Jangan bergerak semasa cerapan",15);
@@ -27,6 +27,8 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  button("SIMPAN SESI TRAIL SEKARANG",()->saveTrail());
  metrics=label("Heading --° | Course --° | Bearing --°",18);
  realMap=new MapView(this);realMap.setTileSource(TileSourceFactory.MAPNIK);realMap.setMultiTouchControls(true);realMap.getController().setZoom(16.0);navigationOverlay=new NavigationOverlay();realMap.getOverlays().add(navigationOverlay);page.addView(realMap,new LinearLayout.LayoutParams(-1,850));
+ button("BUKA PIN DALAM GOOGLE MAPS (SATELIT)",()->openGoogleMaps());
+ button("MOD PETA: HEADING-UP / NORTH-UP",()->{headingUp=!headingUp;if(!headingUp)realMap.setMapOrientation(0f);else updateMapOrientation(true);status.setText(headingUp?"HEADING-UP: anak panah tegak, peta berpusing.":"NORTH-UP: utara kekal di atas.");realMap.invalidate();});
  button("IKUT SAYA — ANAK PANAH GPS",()->{followGps=true;mapCentered=false;updateMap();status.setText("IKUT SAYA aktif. Peta mengikuti kedudukan GPS.");});
  button("LIHAT PIN SASARAN",()->{if(!Double.isNaN(targetLat)){followGps=false;realMap.getController().animateTo(new GeoPoint(targetLat,targetLon));realMap.getController().setZoom(18.0);}});
  label("▲ BIRU = SAYA DI SINI    ● MERAH = SASARAN",14);label("© OpenStreetMap contributors (ODbL)",12);
@@ -79,7 +81,7 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
    canvas.save();canvas.translate(x,y);
    // osmdroid map bearing rotates the map; compensate to retain true compass heading.
    float direction=(float)(!Double.isNaN(heading)?heading:(!Float.isNaN(course)?course:0));
-   canvas.rotate(direction-map.getMapOrientation());
+   canvas.rotate(headingUp?0f:direction);
    Path arrow=new Path();arrow.moveTo(0,-32);arrow.lineTo(20,23);arrow.lineTo(0,13);arrow.lineTo(-20,23);arrow.close();
    paint.setStyle(Paint.Style.STROKE);paint.setStrokeJoin(Paint.Join.ROUND);paint.setStrokeWidth(7f);paint.setColor(Color.WHITE);canvas.drawPath(arrow,paint);
    paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(20,116,235));canvas.drawPath(arrow,paint);
@@ -100,9 +102,33 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
    if(routeLine==null){routeLine=new Polyline();routeLine.getOutlinePaint().setColor(Color.rgb(22,160,82));routeLine.getOutlinePaint().setStrokeWidth(8f);realMap.getOverlays().add(0,routeLine);}
    routeLine.setPoints(pts);
   }catch(Exception ignored){}
+  updateMapOrientation(false);
   realMap.invalidate();
  }
- @Override public void onSensorChanged(SensorEvent e){if(e.sensor.getType()==Sensor.TYPE_ROTATION_VECTOR){float[] m=new float[9],a=new float[3];SensorManager.getRotationMatrixFromVector(m,e.values);SensorManager.getOrientation(m,a);heading=(Math.toDegrees(a[0])+360)%360;render();if(realMap!=null)realMap.invalidate();}}
+ @Override public void onSensorChanged(SensorEvent e){if(e.sensor.getType()==Sensor.TYPE_ROTATION_VECTOR){float[] m=new float[9],a=new float[3];SensorManager.getRotationMatrixFromVector(m,e.values);SensorManager.getOrientation(m,a);heading=(Math.toDegrees(a[0])+360)%360;render();updateMapOrientation(false);if(realMap!=null)realMap.invalidate();}}
+ void updateMapOrientation(boolean force){
+  if(realMap==null||!headingUp||Double.isNaN(heading))return;
+  long now=SystemClock.elapsedRealtime();
+  float desired=(float)heading;
+  if(Float.isNaN(mapHeading)){mapHeading=desired;force=true;}
+  float delta=((desired-mapHeading+540f)%360f)-180f;
+  // Deadband and low-pass reduce compass jitter, but do not improve GNSS accuracy.
+  if(!force&&(Math.abs(delta)<3f||now-lastMapRotation<120))return;
+  mapHeading=(mapHeading+(force?delta:delta*0.24f)+360f)%360f;
+  realMap.setMapOrientation(-mapHeading);
+  lastMapRotation=now;
+ }
+ void openGoogleMaps(){
+  if(Double.isNaN(targetLat)||Double.isNaN(targetLon)){status.setText("Tetapkan koordinat pin sasaran dahulu.");return;}
+  String point=String.format(Locale.US,"%.8f,%.8f",targetLat,targetLon);
+  android.net.Uri uri=android.net.Uri.parse("geo:"+point+"?q="+point+"(Pin%20Sasaran)&z=20");
+  Intent intent=new Intent(Intent.ACTION_VIEW,uri);intent.setPackage("com.google.android.apps.maps");
+  try{startActivity(intent);status.setText("Google Maps dibuka. Pilih lapisan Satellite jika belum aktif.");}
+  catch(android.content.ActivityNotFoundException ex){
+   try{Intent fallback=new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query="+point));startActivity(fallback);}
+   catch(Exception e){status.setText("Tiada aplikasi peta tersedia: "+e.getMessage());}
+  }
+ }
  @Override public void onAccuracyChanged(Sensor s,int a){}
  @Override protected void onResume(){super.onResume();if(Double.isNaN(targetLat)){android.content.SharedPreferences t=getSharedPreferences("gps_target",MODE_PRIVATE);if(t.contains("lat")){targetLat=Double.longBitsToDouble(t.getLong("lat",0));targetLon=Double.longBitsToDouble(t.getLong("lon",0));coords.setText(String.format(Locale.US,"%.8f, %.8f",targetLat,targetLon));}}requestLiveGps();android.content.SharedPreferences modes=getSharedPreferences("gps_mode",MODE_PRIVATE);findOn=modes.getBoolean("find",false);recordOn=modes.getBoolean("record",false);beepOn=modes.getBoolean("beep",false);refreshModes();if(realMap!=null)realMap.onResume();if(rotation!=null)sm.registerListener(this,rotation,SensorManager.SENSOR_DELAY_UI);IntentFilter f=new IntentFilter(TrackingService.ACTION_UPDATE);if(Build.VERSION.SDK_INT>=33)registerReceiver(updates,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(updates,f);}
  void requestLiveGps(){if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},9);return;}try{if(!liveGpsSubscribed){lm.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0,this);liveGpsSubscribed=true;}Location last=lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);if(last!=null)onLocationChanged(last);if(!lm.isProviderEnabled(LocationManager.GPS_PROVIDER))status.setText("GPS telefon OFF — hidupkan Location.");}catch(Exception e){status.setText("GPS gagal: "+e.getMessage());}}
