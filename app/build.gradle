@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
  namespace 'com.jams.gpspointfinder'
  compileSdk 35
- defaultConfig { applicationId 'com.jams.gpspointfinder'; minSdk 26; targetSdk 35; versionCode 342; versionName '3.4.2-heading-up-beta' }
+ defaultConfig { applicationId 'com.jams.gpspointfinder'; minSdk 26; targetSdk 35; versionCode 360; versionName '3.6-maplibre-preview' }
 }
 
-dependencies { implementation 'org.osmdroid:osmdroid-android:6.1.20' }
+dependencies { implementation 'org.osmdroid:osmdroid-android:6.1.20'; implementation 'org.maplibre.gl:android-sdk:11.11.0' }
