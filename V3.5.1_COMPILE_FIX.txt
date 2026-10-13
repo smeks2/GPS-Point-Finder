@@ -1,0 +1,1 @@
+Fixed MapLibre 13.6.1 MapLibreMap class name and removed unsupported annotation Marker.setRotation(float); arrow bitmap rotated toward target bearing. GitHub Actions build not verified locally.
