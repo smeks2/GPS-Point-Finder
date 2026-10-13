@@ -1,14 +1,14 @@
 package com.jams.gpspointfinder;
-import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.*;import android.graphics.*;import android.hardware.*;import android.location.*;import android.os.*;import android.view.*;import android.widget.*;import org.json.*;import java.util.*;import java.util.regex.*;import org.osmdroid.config.Configuration;import org.osmdroid.tileprovider.tilesource.TileSourceFactory;import org.osmdroid.views.MapView;import org.osmdroid.views.overlay.Marker;import org.osmdroid.views.overlay.Polyline;import org.osmdroid.util.GeoPoint;import org.osmdroid.views.overlay.Overlay;
+import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.*;import android.graphics.*;import android.hardware.*;import android.location.*;import android.os.*;import android.view.*;import android.widget.*;import org.json.*;import java.util.*;import java.util.regex.*;import org.osmdroid.config.Configuration;import org.osmdroid.tileprovider.tilesource.TileSourceFactory;import org.osmdroid.views.MapView;import org.osmdroid.views.overlay.Marker;import org.osmdroid.views.overlay.Polyline;import org.osmdroid.util.GeoPoint;import org.osmdroid.views.overlay.Overlay;import org.maplibre.android.MapLibre;import org.maplibre.android.maps.MapboxMap;import org.maplibre.android.camera.CameraPosition;import org.maplibre.android.camera.CameraUpdateFactory;import org.maplibre.android.geometry.LatLng;import org.maplibre.android.annotations.MarkerOptions;import org.maplibre.android.annotations.IconFactory;
 public class MainActivity extends Activity implements SensorEventListener,LocationListener {
- LinearLayout page;TextView metrics,status,modeStatus,markProgressLabel,pinLabel;ProgressBar markProgress;Spinner markType;Button findButton,recordButton,beepButton;boolean findOn=false,recordOn=false,beepOn=false;EditText coords,name;Spinner saved;Button headingButton,offlineButton;TextView smartMapLabel;boolean offlineTiles=false,precision2D=false;MapLibreNavigationView distantMap;boolean distantMapReady=false;int activePoint=-1;MapView realMap;Marker targetMarker,userMarker;Polyline routeLine;boolean mapCentered=false,followGps=true,headingUp=true;float mapHeading=Float.NaN;long lastMapRotation=0;Overlay navigationOverlay;SensorManager sm;Sensor rotation;LocationManager lm;PointStore store;
+ LinearLayout page;TextView metrics,status,modeStatus,markProgressLabel;ProgressBar markProgress;Spinner markType;Button findButton,recordButton,beepButton;boolean findOn=false,recordOn=false,beepOn=false;EditText coords,name;Spinner saved;MapView realMap;org.maplibre.android.maps.MapView map3d;MapboxMap mapLibre;org.maplibre.android.annotations.Marker blue3d,red3d;TextView smartMapStatus;String smartMode="AUTO";boolean near2d=false;Marker targetMarker,userMarker;Polyline routeLine;boolean mapCentered=false,followGps=true;Overlay navigationOverlay;SensorManager sm;Sensor rotation;LocationManager lm;PointStore store;
  double targetLat=Double.NaN,targetLon=Double.NaN,heading=Double.NaN,curLat=Double.NaN,curLon=Double.NaN;float bearing=Float.NaN,course=Float.NaN,accuracy=Float.NaN,distance=-1,total=0;double altitude=Double.NaN;
  boolean measuring=false;boolean liveGpsSubscribed=false;long lastGpsFix=0;long started=0;ArrayList<Location> samples=new ArrayList<>();Handler handler=new Handler(Looper.getMainLooper());
  final BroadcastReceiver updates=new BroadcastReceiver(){public void onReceive(Context c,Intent i){curLat=i.getDoubleExtra("lat",Double.NaN);curLon=i.getDoubleExtra("lon",Double.NaN);bearing=i.getFloatExtra("bearing",Float.NaN);course=i.getFloatExtra("course",Float.NaN);accuracy=i.getFloatExtra("accuracy",Float.NaN);distance=i.getFloatExtra("distance",-1);altitude=i.getDoubleExtra("altitude",Double.NaN);total=i.getFloatExtra("total",0);lastGpsFix=SystemClock.elapsedRealtime();render();updateMap();refreshModes();}};
  @Override public void onCreate(Bundle b){super.onCreate(b);store=new PointStore(this);sm=(SensorManager)getSystemService(SENSOR_SERVICE);rotation=sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);lm=(LocationManager)getSystemService(LOCATION_SERVICE);
- Configuration.getInstance().load(this,getSharedPreferences("osmdroid",MODE_PRIVATE));Configuration.getInstance().setUserAgentValue(getPackageName());
+ MapLibre.getInstance(this);Configuration.getInstance().load(this,getSharedPreferences("osmdroid",MODE_PRIVATE));Configuration.getInstance().setUserAgentValue(getPackageName());
  ScrollView scroll=new ScrollView(this);page=new LinearLayout(this);page.setPadding(22,22,22,22);page.setOrientation(1);page.setBackgroundColor(Color.rgb(239,245,242));scroll.addView(page);setContentView(scroll);
- label("JAIMS GPS PRO v3.6 MAPLIBRE PREVIEW",22);label("OFFLINE • MARK 60s • FIND • TRACK",14);
+ label("JAIMS GPS PRO v3.5 SMART MAP BETA",22);label("OFFLINE • MARK 60s • FIND • TRACK",14);
  name=new EditText(this);name.setHint("Nama batu / titik (contoh: Batu 01)");page.addView(name);
  markType=new Spinner(this);markType.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"START — Lokasi mula","CHECKPOINT — Persinggahan","BOUNDARY — Batu sempadan","END — Lokasi akhir"}));page.addView(markType);
  markProgressLabel=label("MARK POINT: Sedia • Jangan bergerak semasa cerapan",15);
@@ -16,26 +16,23 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  button("MARK POINT — UKUR 60 SAAT",()->startMark());
  coords=new EditText(this);coords.setHint("Latitude, Longitude — contoh: 6.698351, 116.796772");page.addView(coords);
  button("TETAPKAN PIN DARIPADA KOORDINAT",()->parseTarget());
- saved=new Spinner(this);page.addView(saved);reload();button("CARI PIN",()->selectPoint());
- LinearLayout pinBar=new LinearLayout(this);pinBar.setOrientation(LinearLayout.HORIZONTAL);page.addView(pinBar);compactButton(pinBar,"+ PIN",()->addPinDialog());compactButton(pinBar,"◀ PREV",()->movePoint(-1));compactButton(pinBar,"NEXT ▶",()->movePoint(1));compactButton(pinBar,"SENARAI",()->showPoints());
- pinLabel=label("Sasaran: koordinat manual / belum dipilih",15);
+ saved=new Spinner(this);page.addView(saved);reload();button("CARI TITIK DIPILIH",()->selectPoint());
  modeStatus=label("STATUS: STANDBY",17);
  findButton=modeButton("FIND POINT",()->{if(!findOn&&Double.isNaN(targetLat)){status.setText("Tetapkan pin sasaran dahulu sebelum FIND.");return;}findOn=!findOn;if(findOn)beepOn=true;applyMode();});
  recordButton=modeButton("REKOD JEJAK",()->{recordOn=!recordOn;applyMode();});
  beepButton=modeButton("SMART BEEP",()->{if(!beepOn&&(!findOn||Double.isNaN(targetLat))){status.setText("Smart Beep memerlukan FIND dan pin sasaran.");return;}beepOn=!beepOn;applyMode();});
  button("HENTI SEMUA",()->{stopService(new Intent(this,TrackingService.class));findOn=false;recordOn=false;beepOn=false;getSharedPreferences("gps_mode",MODE_PRIVATE).edit().putBoolean("running",false).putBoolean("find",false).putBoolean("record",false).putBoolean("beep",false).apply();refreshModes();});
- button("GPX",()->shareGpx());
- button("MY TRAILS",()->showTrails());
- button("SIMPAN TRAIL",()->saveTrail());
+ button("KONGSI JEJAK GPX",()->shareGpx());
+ button("MY TRAILS — SEJARAH PERJALANAN",()->showTrails());
+ button("SIMPAN SESI TRAIL SEKARANG",()->saveTrail());
  metrics=label("Heading --° | Course --° | Bearing --°",18);
  realMap=new MapView(this);realMap.setTileSource(TileSourceFactory.MAPNIK);realMap.setMultiTouchControls(true);realMap.getController().setZoom(16.0);navigationOverlay=new NavigationOverlay();realMap.getOverlays().add(navigationOverlay);page.addView(realMap,new LinearLayout.LayoutParams(-1,850));
- distantMap=new MapLibreNavigationView(this,b);page.addView(distantMap,new LinearLayout.LayoutParams(-1,850));distantMap.setVisibility(View.GONE);
- button("SATELIT / 3D GOOGLE (LUAR)",()->openGoogleMaps());
- offlineButton=modeButton("PETA OFFLINE (CACHE)",()->{offlineTiles=!offlineTiles;realMap.setUseDataConnection(!offlineTiles);styleMode(offlineButton,"PETA OFFLINE (CACHE)",offlineTiles);status.setText(offlineTiles?"OFFLINE: hanya tile OSM yang sudah ada dalam cache. Jika kosong, peta belum dimuat turun.":"ONLINE: tile OSM baharu boleh dimuat melalui internet.");realMap.invalidate();});styleMode(offlineButton,"PETA OFFLINE (CACHE)",offlineTiles);
- smartMapLabel=label("SMART MAP: menunggu GPS / pin sasaran • 2D OSM",14);
- headingButton=modeButton("HEADING-UP",()->{headingUp=!headingUp;if(!headingUp)realMap.setMapOrientation(0f);else updateMapOrientation(true);styleMode(headingButton,"HEADING-UP",headingUp);status.setText(headingUp?"HEADING-UP: peta berpusing.":"NORTH-UP: utara di atas.");realMap.invalidate();});styleMode(headingButton,"HEADING-UP",headingUp);
- button("IKUT SAYA",()->{followGps=true;mapCentered=false;updateMap();status.setText("IKUT SAYA aktif. Peta mengikuti kedudukan GPS.");});
- button("LIHAT PIN",()->{if(!Double.isNaN(targetLat)){followGps=false;realMap.getController().animateTo(new GeoPoint(targetLat,targetLon));realMap.getController().setZoom(18.0);}});
+  map3d=new org.maplibre.android.maps.MapView(this);map3d.onCreate(b);page.addView(map3d,new LinearLayout.LayoutParams(-1,850));map3d.setVisibility(View.GONE);
+  map3d.getMapAsync(map->{mapLibre=map;map.setStyle("https://tiles.openfreemap.org/styles/liberty",style->{updateMap();});});
+  smartMapStatus=label("SMART MAP: AUTO — 3D >30m, 2D ≤30m, zon carian ≤4m",14);
+  button("SMART MAP: AUTO / 2D / 3D",()->{smartMode=smartMode.equals("AUTO")?"2D":smartMode.equals("2D")?"3D":"AUTO";updateMap();});
+ button("IKUT SAYA — ANAK PANAH GPS",()->{followGps=true;mapCentered=false;updateMap();status.setText("IKUT SAYA aktif. Peta mengikuti kedudukan GPS.");});
+ button("LIHAT PIN SASARAN",()->{if(!Double.isNaN(targetLat)){followGps=false;realMap.getController().animateTo(new GeoPoint(targetLat,targetLon));realMap.getController().setZoom(18.0);}});
  label("▲ BIRU = SAYA DI SINI    ● MERAH = SASARAN",14);label("© OpenStreetMap contributors (ODbL)",12);
  status=label("Peta jalan sebenar OpenStreetMap. Internet diperlukan untuk tile baharu; kawasan yang pernah dilihat mungkin tersedia dalam cache. Bukan satelit atau 3D.",14);
  label("Pin sasaran kekal. Bacaan GPS boleh tersasar beberapa meter; bukan pengesahan sempadan sah.",13);
@@ -51,18 +48,11 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  Intent i=new Intent(this,TrackingService.class).setAction(TrackingService.ACTION_START);i.putExtra(TrackingService.EXTRA_LAT,targetLat);i.putExtra(TrackingService.EXTRA_LON,targetLon);i.putExtra("record",recordOn);i.putExtra("find",findOn);i.putExtra("beep",beepOn);
  try{startForegroundService(i);status.setText("MENUNGGU GPS — semak Location dan notifikasi tracking. Mod Find/Track dihantar ke servis.");}catch(Exception e){findOn=false;recordOn=false;beepOn=false;status.setText("SERVIS GAGAL: "+e.getMessage());}refreshModes();}
  void persistTarget(){getSharedPreferences("gps_target",MODE_PRIVATE).edit().putLong("lat",Double.doubleToRawLongBits(targetLat)).putLong("lon",Double.doubleToRawLongBits(targetLon)).apply();}
- void reload(){JSONArray a=store.points();ArrayList<String> names=new ArrayList<>();for(int j=0;j<a.length();j++){JSONObject p=a.optJSONObject(j);names.add((j+1)+". "+p.optString("name")+(p.isNull("accuracy")?" • manual":" (GPS ±"+p.optDouble("accuracy",0)+"m)"));}if(names.isEmpty())names.add("Tiada titik tersimpan");saved.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names));if(activePoint>=0&&activePoint<a.length())saved.setSelection(activePoint);}
- void selectPoint(){activatePoint(saved.getSelectedItemPosition());}
- void activatePoint(int index){JSONObject p=store.points().optJSONObject(index);if(p==null){status.setText("Belum ada titik disimpan");return;}activePoint=index;targetLat=p.optDouble("lat");targetLon=p.optDouble("lon");persistTarget();coords.setText(String.format(Locale.US,"%.8f, %.8f",targetLat,targetLon));saved.setSelection(index);if(pinLabel!=null)pinLabel.setText("SASARAN: "+p.optString("name")+" • "+p.optString("status","Belum Cari"));status.setText("Navigasi ke: "+p.optString("name"));if(findOn||recordOn)applyMode();render();updateMap();}
- void movePoint(int direction){JSONArray a=store.points();if(a.length()==0){status.setText("Tambah pin dahulu");return;}int next=activePoint<0?0:(activePoint+direction+a.length())%a.length();activatePoint(next);}
- void compactButton(LinearLayout parent,String title,Runnable action){Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setTextSize(11);b.setSingleLine(true);b.setIncludeFontPadding(false);b.setPadding(0,0,0,0);b.setMinHeight(0);b.setMinimumHeight(0);int height=(int)(52*getResources().getDisplayMetrics().density+0.5f);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,height,1);int margin=(int)(2*getResources().getDisplayMetrics().density+0.5f);lp.setMargins(margin,margin,margin,margin);parent.addView(b,lp);b.setOnClickListener(v->action.run());}
- void addPinDialog(){LinearLayout form=new LinearLayout(this);form.setOrientation(1);form.setPadding(30,8,30,8);EditText n=new EditText(this),la=new EditText(this),lo=new EditText(this);n.setHint("Nama: BS-01");la.setHint("Latitud: 6.874779");lo.setHint("Longitud: 116.692449");la.setInputType(8194|4096);lo.setInputType(8194|4096);form.addView(n);form.addView(la);form.addView(lo);new AlertDialog.Builder(this).setTitle("TAMBAH BATU SEMPADAN").setView(form).setPositiveButton("SIMPAN",(d,w)->{try{String label=n.getText().toString().trim();double lat=Double.parseDouble(la.getText().toString().trim()),lon=Double.parseDouble(lo.getText().toString().trim());if(label.isEmpty()||Math.abs(lat)>90||Math.abs(lon)>180)throw new Exception();if(!store.add(label,lat,lon,Float.NaN)){Toast.makeText(this,"Gagal menyimpan pin",Toast.LENGTH_LONG).show();return;}reload();activatePoint(store.points().length()-1);Toast.makeText(this,"Pin disimpan: "+label+" • Jumlah "+store.points().length(),Toast.LENGTH_LONG).show();}catch(Exception ex){Toast.makeText(this,"Nama atau koordinat tidak sah. Cuba lagi.",Toast.LENGTH_LONG).show();}}).setNegativeButton("BATAL",null).show();}
- void showPoints(){JSONArray a=store.points();if(a.length()==0){new AlertDialog.Builder(this).setTitle("MY BOUNDARY POINTS").setMessage("Belum ada pin tersimpan. Tekan + PIN untuk tambah batu sempadan.").setPositiveButton("+ PIN",(d,w)->addPinDialog()).setNegativeButton("TUTUP",null).show();return;}String[] titles=new String[a.length()];for(int i=0;i<a.length();i++){JSONObject p=a.optJSONObject(i);titles[i]=p.optString("name")+"  ["+p.optString("status","Belum Cari")+"]";}new AlertDialog.Builder(this).setTitle("MY BOUNDARY POINTS").setItems(titles,(d,i)->pointActions(i)).setPositiveButton("+ PIN",(d,w)->addPinDialog()).setNegativeButton("TUTUP",null).show();}
- void pointActions(int i){JSONObject p=store.points().optJSONObject(i);if(p==null)return;new AlertDialog.Builder(this).setTitle(p.optString("name")).setItems(new String[]{"NAVIGASI KE PIN","TANDA JUMPA","TANDA TIDAK JUMPA","BELUM CARI","PADAM PIN"},(d,choice)->{if(choice==0){activatePoint(i);return;}if(choice==4){new AlertDialog.Builder(this).setMessage("Padam "+p.optString("name")+"?").setPositiveButton("PADAM",(dd,w)->{store.remove(i);if(activePoint==i){activePoint=-1;targetLat=Double.NaN;targetLon=Double.NaN;getSharedPreferences("gps_target",MODE_PRIVATE).edit().clear().apply();if(findOn){findOn=false;beepOn=false;applyMode();}}else if(activePoint>i)activePoint--;reload();updateMap();}).setNegativeButton("BATAL",null).show();return;}store.setStatus(i,choice==1?"Jumpa":choice==2?"Tidak Jumpa":"Belum Cari");reload();if(activePoint==i)activatePoint(i);}).show();}
-
- void parseTarget(){Matcher m=Pattern.compile("(-?\\d{1,3}\\.\\d+)\\s*[,\\s]\\s*(-?\\d{1,3}\\.\\d+)").matcher(coords.getText());if(!m.find()){Toast.makeText(this,"Format: latitude, longitude",Toast.LENGTH_LONG).show();return;}double a=Double.parseDouble(m.group(1)),b=Double.parseDouble(m.group(2));if(Math.abs(a)>90||Math.abs(b)>180){Toast.makeText(this,"Koordinat tidak sah",Toast.LENGTH_LONG).show();return;}targetLat=a;targetLon=b;activePoint=-1;if(pinLabel!=null)pinLabel.setText("Sasaran: koordinat manual");persistTarget();status.setText("Pin sasaran ditetapkan. Aktifkan FIND untuk panduan bunyi.");render();updateMap();}
+ void reload(){JSONArray a=store.points();ArrayList<String> names=new ArrayList<>();for(int j=0;j<a.length();j++){JSONObject p=a.optJSONObject(j);names.add((j+1)+". "+p.optString("name")+" (±"+p.optDouble("accuracy",0)+"m)");}if(names.isEmpty())names.add("Tiada titik tersimpan");saved.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names));}
+ void selectPoint(){JSONObject p=store.points().optJSONObject(saved.getSelectedItemPosition());if(p==null){status.setText("Belum ada titik disimpan");return;}targetLat=p.optDouble("lat");targetLon=p.optDouble("lon");persistTarget();coords.setText(String.format(Locale.US,"%.8f, %.8f",targetLat,targetLon));status.setText("Pin kekal: "+p.optString("name"));render();updateMap();}
+ void parseTarget(){Matcher m=Pattern.compile("(-?\\d{1,3}\\.\\d+)\\s*[,\\s]\\s*(-?\\d{1,3}\\.\\d+)").matcher(coords.getText());if(!m.find()){Toast.makeText(this,"Format: latitude, longitude",Toast.LENGTH_LONG).show();return;}double a=Double.parseDouble(m.group(1)),b=Double.parseDouble(m.group(2));if(Math.abs(a)>90||Math.abs(b)>180){Toast.makeText(this,"Koordinat tidak sah",Toast.LENGTH_LONG).show();return;}targetLat=a;targetLon=b;persistTarget();status.setText("Pin sasaran ditetapkan. Aktifkan FIND untuk panduan bunyi.");render();updateMap();}
  void startMark(){if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},7);return;}samples.clear();measuring=true;started=SystemClock.elapsedRealtime();markProgress.setProgress(0);markProgressLabel.setText("CERAPAN BERMULA — TELEFON MESTI PEGUN");try{lm.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0,this);}catch(Exception e){status.setText(e.toString());return;}status.setText("Cerapan 60 saat bermula. Berdiri diam di titik.");handler.postDelayed(new Runnable(){public void run(){if(!measuring)return;long remain=60-(SystemClock.elapsedRealtime()-started)/1000;status.setText("MARK POINT: "+Math.max(0,remain)+" saat • "+samples.size()+" bacaan");markProgress.setProgress((int)Math.min(60,(SystemClock.elapsedRealtime()-started)/1000));markProgressLabel.setText("JANGAN BERGERAK • "+Math.max(0,remain)+" saat lagi • "+samples.size()+" bacaan diterima");if(remain>0)handler.postDelayed(this,1000);else finishMark();}},1000);}
- void finishMark(){measuring=false;markProgress.setProgress(60);lm.removeUpdates(this);if(samples.size()<10){markProgressLabel.setText("GAGAL — bacaan GPS tidak mencukupi. Ulang cerapan.");status.setText("Bacaan GPS tidak mencukupi. Cuba semula di kawasan terbuka.");return;}double la=0,lo=0,weight=0;float best=Float.MAX_VALUE;for(Location l:samples){double w=1.0/Math.max(4,l.getAccuracy()*l.getAccuracy());la+=l.getLatitude()*w;lo+=l.getLongitude()*w;weight+=w;best=Math.min(best,l.getAccuracy());}la/=weight;lo/=weight;String n=name.getText().toString().trim();if(n.isEmpty())n="Titik "+new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date());if(!store.add(n,la,lo,best)){status.setText("Gagal simpan Mark Point");return;}TrailStore.addWaypoint(this,n,markType.getSelectedItemPosition(),la,lo,best);markProgressLabel.setText("SELESAI — waypoint direkod dalam My Trails");targetLat=la;targetLon=lo;persistTarget();coords.setText(String.format(Locale.US,"%.8f, %.8f",la,lo));reload();activePoint=store.points().length()-1;if(pinLabel!=null)pinLabel.setText("SASARAN: "+n);status.setText(String.format(Locale.US,"DISIMPAN: %s • %d bacaan • GPS terbaik ±%.1fm. Bukan ketepatan purata yang dijamin.",n,samples.size(),best));render();}
+ void finishMark(){measuring=false;markProgress.setProgress(60);lm.removeUpdates(this);if(samples.size()<10){markProgressLabel.setText("GAGAL — bacaan GPS tidak mencukupi. Ulang cerapan.");status.setText("Bacaan GPS tidak mencukupi. Cuba semula di kawasan terbuka.");return;}double la=0,lo=0,weight=0;float best=Float.MAX_VALUE;for(Location l:samples){double w=1.0/Math.max(4,l.getAccuracy()*l.getAccuracy());la+=l.getLatitude()*w;lo+=l.getLongitude()*w;weight+=w;best=Math.min(best,l.getAccuracy());}la/=weight;lo/=weight;String n=name.getText().toString().trim();if(n.isEmpty())n="Titik "+new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date());store.add(n,la,lo,best);TrailStore.addWaypoint(this,n,markType.getSelectedItemPosition(),la,lo,best);markProgressLabel.setText("SELESAI — waypoint direkod dalam My Trails");targetLat=la;targetLon=lo;persistTarget();coords.setText(String.format(Locale.US,"%.8f, %.8f",la,lo));reload();status.setText(String.format(Locale.US,"DISIMPAN: %s • %d bacaan • GPS terbaik ±%.1fm. Bukan ketepatan purata yang dijamin.",n,samples.size(),best));render();}
  @Override public void onLocationChanged(Location l){if(measuring&&l.hasAccuracy()&&l.getAccuracy()<=25&&l.getElapsedRealtimeNanos()>0)samples.add(l);if(!Double.isNaN(l.getLatitude())){curLat=l.getLatitude();curLon=l.getLongitude();accuracy=l.hasAccuracy()?l.getAccuracy():Float.NaN;altitude=l.hasAltitude()?l.getAltitude():Double.NaN;course=l.hasBearing()&&l.hasSpeed()&&l.getSpeed()>=1?l.getBearing():Float.NaN;lastGpsFix=SystemClock.elapsedRealtime();if(!findOn&&!recordOn){distance=-1;bearing=Float.NaN;if(!Double.isNaN(targetLat)){Location target=new Location("target");target.setLatitude(targetLat);target.setLongitude(targetLon);distance=l.distanceTo(target);bearing=l.bearingTo(target);}}render();updateMap();}}
  void startTracking(){if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},8);return;}Intent i=new Intent(this,TrackingService.class).setAction(TrackingService.ACTION_START);i.putExtra(TrackingService.EXTRA_LAT,targetLat);i.putExtra(TrackingService.EXTRA_LON,targetLon);i.putExtra("record",true);try{startForegroundService(i);status.setText("GPS + jejak aktif. Notifikasi kekal ketika skrin dikunci.");}catch(Exception e){status.setText("Gagal: "+e.getMessage());}}
  void render(){if(metrics==null)return;String h=Double.isNaN(heading)?"--":String.format(Locale.US,"%.0f",heading);String c=Float.isNaN(course)?"--":String.format(Locale.US,"%.0f",course);String b=Float.isNaN(bearing)?"--":String.format(Locale.US,"%.0f",(bearing+360)%360);
@@ -74,25 +64,6 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
   @Override public void draw(Canvas canvas,MapView map,boolean shadow){
    if(shadow)return;
    android.graphics.Point pixel=new android.graphics.Point();
-   // Live straight-line guide to the active target; not a walkable route.
-   // Draw before markers so the target and user remain clearly visible.
-   if(!Double.isNaN(curLat)&&!Double.isNaN(curLon)&&!Double.isNaN(targetLat)&&!Double.isNaN(targetLon)){
-    android.graphics.Point from=new android.graphics.Point(),to=new android.graphics.Point();
-    map.getProjection().toPixels(new GeoPoint(curLat,curLon),from);
-    map.getProjection().toPixels(new GeoPoint(targetLat,targetLon),to);
-    paint.setStyle(Paint.Style.STROKE);
-    paint.setStrokeWidth(7f);
-    paint.setStrokeCap(Paint.Cap.ROUND);
-    paint.setColor(Color.WHITE);
-    paint.setPathEffect(null);
-    canvas.drawLine(from.x,from.y,to.x,to.y,paint);
-    paint.setStrokeWidth(5f);
-    paint.setColor(Color.rgb(0,156,215));
-    paint.setPathEffect(new android.graphics.DashPathEffect(new float[]{16f,11f},0f));
-    canvas.drawLine(from.x,from.y,to.x,to.y,paint);
-    paint.setPathEffect(null);
-    paint.setStyle(Paint.Style.FILL);
-   }
    if(!Double.isNaN(targetLat)&&!Double.isNaN(targetLon)){
     map.getProjection().toPixels(new GeoPoint(targetLat,targetLon),pixel);
     paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(210,44,54));
@@ -111,8 +82,8 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
    }
    canvas.save();canvas.translate(x,y);
    // osmdroid map bearing rotates the map; compensate to retain true compass heading.
-   float direction=(float)(!Double.isNaN(heading)?heading:(!Float.isNaN(course)?course:0));
-   canvas.rotate(headingUp?0f:direction);
+   float direction=(float)(!Float.isNaN(bearing)?bearing:(!Double.isNaN(heading)?heading:(!Float.isNaN(course)?course:0)));
+   canvas.rotate(direction-map.getMapOrientation());
    Path arrow=new Path();arrow.moveTo(0,-32);arrow.lineTo(20,23);arrow.lineTo(0,13);arrow.lineTo(-20,23);arrow.close();
    paint.setStyle(Paint.Style.STROKE);paint.setStrokeJoin(Paint.Join.ROUND);paint.setStrokeWidth(7f);paint.setColor(Color.WHITE);canvas.drawPath(arrow,paint);
    paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(20,116,235));canvas.drawPath(arrow,paint);
@@ -133,57 +104,35 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
    if(routeLine==null){routeLine=new Polyline();routeLine.getOutlinePaint().setColor(Color.rgb(22,160,82));routeLine.getOutlinePaint().setStrokeWidth(8f);realMap.getOverlays().add(0,routeLine);}
    routeLine.setPoints(pts);
   }catch(Exception ignored){}
-  updatePrecisionMode();
-  updateMapOrientation(false);
+  updateSmartMap();
   realMap.invalidate();
  }
- void updatePrecisionMode(){
-  if(smartMapLabel==null||realMap==null)return;
-  if(Double.isNaN(curLat)||Double.isNaN(curLon)||Double.isNaN(targetLat)||Double.isNaN(targetLon)){
-   smartMapLabel.setText("SMART MAP: pilih pin sasaran • 2D OSM" );if(distantMap!=null)distantMap.setVisibility(View.GONE);realMap.setVisibility(View.VISIBLE);return;
-  }
-  float[] result=new float[1];Location.distanceBetween(curLat,curLon,targetLat,targetLon,result);
-  float d=result[0];
-  // Hysteresis prevents repeated mode changes from GPS noise.
-  if(!precision2D&&d<=10f){precision2D=true;realMap.getController().setZoom(Math.max(realMap.getZoomLevelDouble(),19.0));}
-  else if(precision2D&&d>15f){precision2D=false;}
-  boolean showDistant=!precision2D;
-  if(distantMap!=null){distantMap.setVisibility(showDistant?View.VISIBLE:View.GONE);realMap.setVisibility(showDistant?View.GONE:View.VISIBLE);distantMap.setPositions(curLat,curLon,targetLat,targetLon,Float.isNaN(bearing)?0:bearing);}
-  String mode=precision2D?(d<=4f?"FINAL PIN 4m • ANTI-DRIFT BELUM DIIMPLEMENTASI":"PRECISION 2D ≤10m"):"MAPLIBRE CONDONG • 10m UNTUK 2D";
-  smartMapLabel.setText("SMART MAP: "+mode+" | "+(offlineTiles?"OFFLINE CACHE":"OSM ONLINE/CACHE")+" | GPS ±"+(Float.isNaN(accuracy)?"--":String.format(Locale.US,"%.1f",accuracy))+"m");
- }
-
- @Override protected void onStart(){super.onStart();if(distantMap!=null)distantMap.onStart();}
- @Override protected void onStop(){if(distantMap!=null)distantMap.onStop();super.onStop();}
- @Override public void onLowMemory(){super.onLowMemory();if(distantMap!=null)distantMap.onLowMemory();}
- @Override public void onSensorChanged(SensorEvent e){if(e.sensor.getType()==Sensor.TYPE_ROTATION_VECTOR){float[] m=new float[9],a=new float[3];SensorManager.getRotationMatrixFromVector(m,e.values);SensorManager.getOrientation(m,a);heading=(Math.toDegrees(a[0])+360)%360;render();updateMapOrientation(false);if(realMap!=null)realMap.invalidate();}}
- void updateMapOrientation(boolean force){
-  if(realMap==null||!headingUp||Double.isNaN(heading))return;
-  long now=SystemClock.elapsedRealtime();
-  float desired=(float)heading;
-  if(Float.isNaN(mapHeading)){mapHeading=desired;force=true;}
-  float delta=((desired-mapHeading+540f)%360f)-180f;
-  // Deadband and low-pass reduce compass jitter, but do not improve GNSS accuracy.
-  if(!force&&(Math.abs(delta)<3f||now-lastMapRotation<120))return;
-  mapHeading=(mapHeading+(force?delta:delta*0.24f)+360f)%360f;
-  realMap.setMapOrientation(-mapHeading);
-  lastMapRotation=now;
- }
- void openGoogleMaps(){
-  if(Double.isNaN(targetLat)||Double.isNaN(targetLon)){status.setText("Tetapkan koordinat pin sasaran dahulu.");return;}
-  String point=String.format(Locale.US,"%.8f,%.8f",targetLat,targetLon);
-  android.net.Uri uri=android.net.Uri.parse("geo:"+point+"?q="+point+"(Pin%20Sasaran)&z=20");
-  Intent intent=new Intent(Intent.ACTION_VIEW,uri);intent.setPackage("com.google.android.apps.maps");
-  try{startActivity(intent);status.setText("Google Maps dibuka. Pilih lapisan Satellite jika belum aktif.");}
-  catch(android.content.ActivityNotFoundException ex){
-   try{Intent fallback=new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query="+point));startActivity(fallback);}
-   catch(Exception e){status.setText("Tiada aplikasi peta tersedia: "+e.getMessage());}
+ void updateSmartMap(){
+  if(realMap==null||map3d==null)return;
+  if(smartMode.equals("AUTO")&&distance>=0){if(near2d&&distance>45)near2d=false;else if(!near2d&&distance<=30)near2d=true;}
+  boolean use3d=smartMode.equals("3D")||(smartMode.equals("AUTO")&&!near2d);
+  realMap.setVisibility(use3d?View.GONE:View.VISIBLE);map3d.setVisibility(use3d?View.VISIBLE:View.GONE);
+  if(smartMapStatus!=null)smartMapStatus.setText("SMART MAP "+smartMode+" | "+(use3d?"3D CONDONG":"2D PRECISION")+(distance>=0&&distance<=4?" | DALAM ZON CARIAN (GPS ±"+String.format(Locale.US,"%.1f",accuracy)+"m)":""));
+  if(mapLibre==null||mapLibre.getStyle()==null)return;
+  if(blue3d!=null){mapLibre.removeMarker(blue3d);blue3d=null;}if(red3d!=null){mapLibre.removeMarker(red3d);red3d=null;}
+  if(!Double.isNaN(targetLat)&&!Double.isNaN(targetLon))red3d=mapLibre.addMarker(new MarkerOptions().position(new LatLng(targetLat,targetLon)).title("PIN SASARAN"));
+  if(!Double.isNaN(curLat)&&!Double.isNaN(curLon)){
+   // Blue user arrow bitmap: always points to active target bearing, never to course.
+   Bitmap bitmap=Bitmap.createBitmap(80,80,Bitmap.Config.ARGB_8888);Canvas c=new Canvas(bitmap);Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);Path path=new Path();path.moveTo(40,4);path.lineTo(65,69);path.lineTo(40,55);path.lineTo(15,69);path.close();p.setColor(Color.WHITE);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(7);c.drawPath(path,p);p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(20,116,235));c.drawPath(path,p);
+   blue3d=mapLibre.addMarker(new MarkerOptions().position(new LatLng(curLat,curLon)).title("SAYA").icon(IconFactory.getInstance(this).fromBitmap(bitmap)));
+   blue3d.setRotation(Float.isNaN(bearing)?0:bearing);
+   if(followGps&&use3d){CameraPosition cam=new CameraPosition.Builder().target(new LatLng(curLat,curLon)).zoom(17).tilt(55).bearing(0).build();mapLibre.animateCamera(CameraUpdateFactory.newCameraPosition(cam),500);}
   }
  }
+ @Override public void onSensorChanged(SensorEvent e){if(e.sensor.getType()==Sensor.TYPE_ROTATION_VECTOR){float[] m=new float[9],a=new float[3];SensorManager.getRotationMatrixFromVector(m,e.values);SensorManager.getOrientation(m,a);heading=(Math.toDegrees(a[0])+360)%360;render();if(realMap!=null)realMap.invalidate();}}
+ @Override protected void onStart(){super.onStart();if(map3d!=null)map3d.onStart();}
+ @Override protected void onStop(){if(map3d!=null)map3d.onStop();super.onStop();}
+ @Override protected void onDestroy(){if(map3d!=null)map3d.onDestroy();super.onDestroy();}
+ @Override public void onLowMemory(){super.onLowMemory();if(map3d!=null)map3d.onLowMemory();}
  @Override public void onAccuracyChanged(Sensor s,int a){}
- @Override protected void onResume(){super.onResume();if(Double.isNaN(targetLat)){android.content.SharedPreferences t=getSharedPreferences("gps_target",MODE_PRIVATE);if(t.contains("lat")){targetLat=Double.longBitsToDouble(t.getLong("lat",0));targetLon=Double.longBitsToDouble(t.getLong("lon",0));coords.setText(String.format(Locale.US,"%.8f, %.8f",targetLat,targetLon));}}requestLiveGps();android.content.SharedPreferences modes=getSharedPreferences("gps_mode",MODE_PRIVATE);findOn=modes.getBoolean("find",false);recordOn=modes.getBoolean("record",false);beepOn=modes.getBoolean("beep",false);refreshModes();if(realMap!=null)realMap.onResume();if(distantMap!=null)distantMap.onResume();if(rotation!=null)sm.registerListener(this,rotation,SensorManager.SENSOR_DELAY_UI);IntentFilter f=new IntentFilter(TrackingService.ACTION_UPDATE);if(Build.VERSION.SDK_INT>=33)registerReceiver(updates,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(updates,f);}
+ @Override protected void onResume(){super.onResume();if(Double.isNaN(targetLat)){android.content.SharedPreferences t=getSharedPreferences("gps_target",MODE_PRIVATE);if(t.contains("lat")){targetLat=Double.longBitsToDouble(t.getLong("lat",0));targetLon=Double.longBitsToDouble(t.getLong("lon",0));coords.setText(String.format(Locale.US,"%.8f, %.8f",targetLat,targetLon));}}requestLiveGps();android.content.SharedPreferences modes=getSharedPreferences("gps_mode",MODE_PRIVATE);findOn=modes.getBoolean("find",false);recordOn=modes.getBoolean("record",false);beepOn=modes.getBoolean("beep",false);refreshModes();if(realMap!=null)realMap.onResume();if(map3d!=null)map3d.onResume();if(rotation!=null)sm.registerListener(this,rotation,SensorManager.SENSOR_DELAY_UI);IntentFilter f=new IntentFilter(TrackingService.ACTION_UPDATE);if(Build.VERSION.SDK_INT>=33)registerReceiver(updates,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(updates,f);}
  void requestLiveGps(){if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},9);return;}try{if(!liveGpsSubscribed){lm.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0,this);liveGpsSubscribed=true;}Location last=lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);if(last!=null)onLocationChanged(last);if(!lm.isProviderEnabled(LocationManager.GPS_PROVIDER))status.setText("GPS telefon OFF — hidupkan Location.");}catch(Exception e){status.setText("GPS gagal: "+e.getMessage());}}
- @Override protected void onPause(){super.onPause();if(liveGpsSubscribed){lm.removeUpdates(this);liveGpsSubscribed=false;}if(realMap!=null)realMap.onPause();if(distantMap!=null)distantMap.onPause();sm.unregisterListener(this);unregisterReceiver(updates);if(measuring){measuring=false;markProgressLabel.setText("CERAPAN TERHENTI — ulang semula 60 saat");status.setText("Cerapan dihentikan kerana aplikasi ditinggalkan. Ulangi 60 saat.");}}
+ @Override protected void onPause(){super.onPause();if(liveGpsSubscribed){lm.removeUpdates(this);liveGpsSubscribed=false;}if(realMap!=null)realMap.onPause();if(map3d!=null)map3d.onPause();sm.unregisterListener(this);unregisterReceiver(updates);if(measuring){measuring=false;markProgressLabel.setText("CERAPAN TERHENTI — ulang semula 60 saat");status.setText("Cerapan dihentikan kerana aplikasi ditinggalkan. Ulangi 60 saat.");}}
  @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);if(g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED){if(r==7)startMark();if(r==8)applyMode();if(r==9)requestLiveGps();}}
  void saveTrail(){String title="Trail "+new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date());int count=TrailStore.saveCurrent(this,title);status.setText("My Trails: "+title+" disimpan ("+count+" titik jejak).");}
  void showTrails(){final JSONArray history=TrailStore.history(this);final String[] titles=new String[history.length()];for(int i=0;i<history.length();i++){JSONObject t=history.optJSONObject(i);titles[i]=t==null?"Trail":t.optString("name")+" • "+t.optJSONArray("track").length()+" rekod GPS • "+t.optJSONArray("waypoints").length()+" waypoint";}if(titles.length==0){new AlertDialog.Builder(this).setMessage("Belum ada trail tersimpan. Tekan SIMPAN SESI TRAIL SEKARANG selepas merekod perjalanan.").setPositiveButton("OK",null).show();return;}new AlertDialog.Builder(this).setTitle("MY TRAILS").setItems(titles,(dialog,which)->showTrailDetail(history.optJSONObject(which))).setNegativeButton("Tutup",null).show();}
