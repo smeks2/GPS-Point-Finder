@@ -8,7 +8,7 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  @Override public void onCreate(Bundle b){super.onCreate(b);store=new PointStore(this);sm=(SensorManager)getSystemService(SENSOR_SERVICE);rotation=sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);lm=(LocationManager)getSystemService(LOCATION_SERVICE);
  MapLibre.getInstance(this);Configuration.getInstance().load(this,getSharedPreferences("osmdroid",MODE_PRIVATE));Configuration.getInstance().setUserAgentValue(getPackageName());
  ScrollView scroll=new ScrollView(this);page=new LinearLayout(this);page.setPadding(22,22,22,22);page.setOrientation(1);page.setBackgroundColor(Color.rgb(239,245,242));scroll.addView(page);setContentView(scroll);
- label("JAIMS GPS PRO v3.5 SMART MAP BETA",22);label("OFFLINE • MARK 60s • FIND • TRACK",14);
+ label("JAMS NAVIGATOR v4.0 COMMUNITY — PILOT",22);label("OFFLINE • MARK 60s • FIND • TRACK",14);
  name=new EditText(this);name.setHint("Nama batu / titik (contoh: Batu 01)");page.addView(name);
  markType=new Spinner(this);markType.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"START — Lokasi mula","CHECKPOINT — Persinggahan","BOUNDARY — Batu sempadan","END — Lokasi akhir"}));page.addView(markType);
  markProgressLabel=label("MARK POINT: Sedia • Jangan bergerak semasa cerapan",15);
@@ -22,6 +22,8 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  recordButton=modeButton("REKOD JEJAK",()->{recordOn=!recordOn;applyMode();});
  beepButton=modeButton("SMART BEEP",()->{if(!beepOn&&(!findOn||Double.isNaN(targetLat))){status.setText("Smart Beep memerlukan FIND dan pin sasaran.");return;}beepOn=!beepOn;applyMode();});
  button("HENTI SEMUA",()->{stopService(new Intent(this,TrackingService.class));findOn=false;recordOn=false;beepOn=false;getSharedPreferences("gps_mode",MODE_PRIVATE).edit().putBoolean("running",false).putBoolean("find",false).putBoolean("record",false).putBoolean("beep",false).apply();refreshModes();});
+ button("LAPOR TRAFIK — SIMPAN LOKAL (PILOT)",()->showTrafficReportDialog());
+ button("PTT RADIO — BELUM DISAMBUNG",()->new AlertDialog.Builder(this).setTitle("PTT Community Beta").setMessage("PTT awam dan konvoi peribadi memerlukan server suara, pengesahan pengguna dan sambungan selamat. Tiada audio dihantar oleh versi prototaip ini.").setPositiveButton("OK",null).show());
  button("KONGSI JEJAK GPX",()->shareGpx());
  button("MY TRAILS — SEJARAH PERJALANAN",()->showTrails());
  button("SIMPAN SESI TRAIL SEKARANG",()->saveTrail());
@@ -134,6 +136,14 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  void requestLiveGps(){if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},9);return;}try{if(!liveGpsSubscribed){lm.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0,this);liveGpsSubscribed=true;}Location last=lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);if(last!=null)onLocationChanged(last);if(!lm.isProviderEnabled(LocationManager.GPS_PROVIDER))status.setText("GPS telefon OFF — hidupkan Location.");}catch(Exception e){status.setText("GPS gagal: "+e.getMessage());}}
  @Override protected void onPause(){super.onPause();if(liveGpsSubscribed){lm.removeUpdates(this);liveGpsSubscribed=false;}if(realMap!=null)realMap.onPause();if(map3d!=null)map3d.onPause();sm.unregisterListener(this);unregisterReceiver(updates);if(measuring){measuring=false;markProgressLabel.setText("CERAPAN TERHENTI — ulang semula 60 saat");status.setText("Cerapan dihentikan kerana aplikasi ditinggalkan. Ulangi 60 saat.");}}
  @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);if(g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED){if(r==7)startMark();if(r==8)applyMode();if(r==9)requestLiveGps();}}
+ void showTrafficReportDialog(){
+  final String[] types={"Kemalangan","Banjir","Jalan rosak","Kerja jalan","Kesesakan","Halangan jalan"};
+  if(Double.isNaN(curLat)||Double.isNaN(curLon)){new AlertDialog.Builder(this).setMessage("Tunggu lokasi GPS sebelum membuat laporan. Laporan hanya disimpan pada telefon.").setPositiveButton("OK",null).show();return;}
+  new AlertDialog.Builder(this).setTitle("Laporan trafik (lokal sahaja)").setItems(types,(d,which)->{
+   try{TrafficReportStore.add(this,types[which],curLat,curLon,accuracy);status.setText("Laporan "+types[which]+" disimpan pada telefon. BELUM dihantar kepada komuniti.");}
+   catch(Exception ex){status.setText("Gagal simpan laporan: "+ex.getMessage());}
+  }).setNegativeButton("Batal",null).show();
+ }
  void saveTrail(){String title="Trail "+new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date());int count=TrailStore.saveCurrent(this,title);status.setText("My Trails: "+title+" disimpan ("+count+" titik jejak).");}
  void showTrails(){final JSONArray history=TrailStore.history(this);final String[] titles=new String[history.length()];for(int i=0;i<history.length();i++){JSONObject t=history.optJSONObject(i);titles[i]=t==null?"Trail":t.optString("name")+" • "+t.optJSONArray("track").length()+" rekod GPS • "+t.optJSONArray("waypoints").length()+" waypoint";}if(titles.length==0){new AlertDialog.Builder(this).setMessage("Belum ada trail tersimpan. Tekan SIMPAN SESI TRAIL SEKARANG selepas merekod perjalanan.").setPositiveButton("OK",null).show();return;}new AlertDialog.Builder(this).setTitle("MY TRAILS").setItems(titles,(dialog,which)->showTrailDetail(history.optJSONObject(which))).setNegativeButton("Tutup",null).show();}
  void showTrailDetail(JSONObject trail){if(trail==null)return;JSONArray pts=trail.optJSONArray("track"),wps=trail.optJSONArray("waypoints");StringBuilder sb=new StringBuilder("Tarikh: "+trail.optString("name")+"\nJejak: "+(pts==null?0:pts.length())+" titik GPS\nWaypoint: "+(wps==null?0:wps.length())+"\n\n");if(wps!=null)for(int i=0;i<wps.length();i++){JSONObject w=wps.optJSONObject(i);if(w!=null)sb.append(w.optString("type")).append(" — ").append(w.optString("name")).append("\n").append(String.format(Locale.US,"%.7f, %.7f",w.optDouble("lat"),w.optDouble("lon"))).append("\n\n");}new AlertDialog.Builder(this).setTitle("BUTIRAN TRAIL").setMessage(sb.toString()).setPositiveButton("LIHAT DI PETA",(d,w)->displayTrail(trail)).setNegativeButton("Tutup",null).show();}

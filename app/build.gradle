@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
  namespace 'com.jams.gpspointfinder'
  compileSdk 35
- defaultConfig { applicationId 'com.jams.gpspointfinder'; minSdk 26; targetSdk 35; versionCode 350; versionName '3.5-smart-map-beta' }
+ defaultConfig { applicationId 'com.jams.gpspointfinder'; minSdk 26; targetSdk 35; versionCode 400; versionName '4.0-community-pilot-local' }
 }
 
 dependencies { implementation 'org.osmdroid:osmdroid-android:6.1.20'; implementation 'org.maplibre.gl:android-sdk-opengl:13.6.1' }
