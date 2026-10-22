@@ -1,14 +1,25 @@
 package com.jams.gpspointfinder;
-import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.*;import android.graphics.*;import android.hardware.*;import android.location.*;import android.os.*;import android.view.*;import android.widget.*;import org.json.*;import java.util.*;import java.util.regex.*;import org.osmdroid.config.Configuration;import org.osmdroid.tileprovider.tilesource.TileSourceFactory;import org.osmdroid.views.MapView;import org.osmdroid.views.overlay.Marker;import org.osmdroid.views.overlay.Polyline;import org.osmdroid.util.GeoPoint;import org.osmdroid.views.overlay.Overlay;import org.maplibre.android.MapLibre;import org.maplibre.android.maps.MapLibreMap;import org.maplibre.android.camera.CameraPosition;import org.maplibre.android.camera.CameraUpdateFactory;import org.maplibre.android.geometry.LatLng;import org.maplibre.android.annotations.MarkerOptions;import org.maplibre.android.annotations.IconFactory;
+import android.Manifest;import android.text.*;import java.net.*;import java.io.*;import java.util.concurrent.*;import android.app.*;import android.content.*;import android.content.pm.*;import android.graphics.*;import android.hardware.*;import android.location.*;import android.os.*;import android.view.*;import android.widget.*;import org.json.*;import java.util.*;import java.util.regex.*;import org.osmdroid.config.Configuration;import org.osmdroid.tileprovider.tilesource.TileSourceFactory;import org.osmdroid.views.MapView;import org.osmdroid.views.overlay.Marker;import org.osmdroid.views.overlay.Polyline;import org.osmdroid.util.GeoPoint;import org.osmdroid.views.overlay.Overlay;import org.maplibre.android.MapLibre;import org.maplibre.android.maps.MapLibreMap;import org.maplibre.android.camera.CameraPosition;import org.maplibre.android.camera.CameraUpdateFactory;import org.maplibre.android.geometry.LatLng;import org.maplibre.android.annotations.MarkerOptions;import org.maplibre.android.annotations.IconFactory;
 public class MainActivity extends Activity implements SensorEventListener,LocationListener {
- LinearLayout page;TextView metrics,status,modeStatus,markProgressLabel;ProgressBar markProgress;Spinner markType;Button findButton,recordButton,beepButton;boolean findOn=false,recordOn=false,beepOn=false;EditText coords,name;Spinner saved;MapView realMap;org.maplibre.android.maps.MapView map3d;MapLibreMap mapLibre;org.maplibre.android.annotations.Marker blue3d,red3d;TextView smartMapStatus;String smartMode="AUTO";boolean near2d=false;Marker targetMarker,userMarker;Polyline routeLine;boolean mapCentered=false,followGps=true;Overlay navigationOverlay;SensorManager sm;Sensor rotation;LocationManager lm;PointStore store;
+ EditText destinationInput;LinearLayout suggestionBox;TextView routeInfo;Handler searchHandler=new Handler(Looper.getMainLooper());Runnable pendingSearch;int searchVersion=0;Polyline driveRoute;double destinationLat=Double.NaN,destinationLon=Double.NaN;String destinationName="";
+ FrameLayout mapRoot;ScrollView fieldScroll;LinearLayout floatingSearch;Button fieldToggle;LinearLayout page;TextView metrics,status,modeStatus,markProgressLabel;ProgressBar markProgress;Spinner markType;Button findButton,recordButton,beepButton;boolean findOn=false,recordOn=false,beepOn=false;EditText coords,name;Spinner saved;MapView realMap;org.maplibre.android.maps.MapView map3d;MapLibreMap mapLibre;org.maplibre.android.annotations.Marker blue3d,red3d;TextView smartMapStatus;String smartMode="AUTO";boolean near2d=false;Marker targetMarker,userMarker;Polyline routeLine;boolean mapCentered=false,followGps=true;Overlay navigationOverlay;SensorManager sm;Sensor rotation;LocationManager lm;PointStore store;
  double targetLat=Double.NaN,targetLon=Double.NaN,heading=Double.NaN,curLat=Double.NaN,curLon=Double.NaN;float bearing=Float.NaN,course=Float.NaN,accuracy=Float.NaN,distance=-1,total=0;double altitude=Double.NaN;
  boolean measuring=false;boolean liveGpsSubscribed=false;long lastGpsFix=0;long started=0;ArrayList<Location> samples=new ArrayList<>();Handler handler=new Handler(Looper.getMainLooper());
  final BroadcastReceiver updates=new BroadcastReceiver(){public void onReceive(Context c,Intent i){curLat=i.getDoubleExtra("lat",Double.NaN);curLon=i.getDoubleExtra("lon",Double.NaN);bearing=i.getFloatExtra("bearing",Float.NaN);course=i.getFloatExtra("course",Float.NaN);accuracy=i.getFloatExtra("accuracy",Float.NaN);distance=i.getFloatExtra("distance",-1);altitude=i.getDoubleExtra("altitude",Double.NaN);total=i.getFloatExtra("total",0);lastGpsFix=SystemClock.elapsedRealtime();render();updateMap();refreshModes();}};
  @Override public void onCreate(Bundle b){super.onCreate(b);store=new PointStore(this);sm=(SensorManager)getSystemService(SENSOR_SERVICE);rotation=sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);lm=(LocationManager)getSystemService(LOCATION_SERVICE);
  MapLibre.getInstance(this);Configuration.getInstance().load(this,getSharedPreferences("osmdroid",MODE_PRIVATE));Configuration.getInstance().setUserAgentValue(getPackageName());
- ScrollView scroll=new ScrollView(this);page=new LinearLayout(this);page.setPadding(22,22,22,22);page.setOrientation(1);page.setBackgroundColor(Color.rgb(239,245,242));scroll.addView(page);setContentView(scroll);
- label("JAMS NAVIGATOR v4.0 COMMUNITY — PILOT",22);label("OFFLINE • MARK 60s • FIND • TRACK",14);
+ mapRoot=new FrameLayout(this);mapRoot.setBackgroundColor(Color.rgb(225,235,228));setContentView(mapRoot);
+ fieldScroll=new ScrollView(this);fieldScroll.setFillViewport(false);fieldScroll.setBackgroundColor(Color.WHITE);page=new LinearLayout(this);page.setPadding(dp(14),dp(12),dp(14),dp(16));page.setOrientation(1);page.setBackgroundColor(Color.WHITE);fieldScroll.addView(page);
+ floatingSearch=new LinearLayout(this);floatingSearch.setOrientation(1);floatingSearch.setPadding(dp(10),dp(7),dp(10),dp(7));floatingSearch.setBackground(makePanelBackground());
+ label("JAMS NAVIGATOR v4.1 — DESTINATION SEARCH",22);
+ label("DRIVE MODE — Taip destinasi untuk melihat cadangan tempat",16);
+ destinationInput=new EditText(this);destinationInput.setSingleLine(true);destinationInput.setHint("🔍 Cari destinasi: bandar, jalan, kedai, sekolah...");page.addView(destinationInput);
+ suggestionBox=new LinearLayout(this);suggestionBox.setOrientation(1);page.addView(suggestionBox);
+ routeInfo=label("Cari tempat, pilih cadangan, kemudian tekan LALUAN JALAN RAYA.",14);
+ button("CARI DESTINASI",()->searchDestinations(destinationInput.getText().toString(),++searchVersion));
+ button("LALUAN JALAN RAYA — PREVIEW",()->requestDrivingRoute());
+ destinationInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence t,int start,int count,int after){}public void onTextChanged(CharSequence t,int start,int before,int count){int id=++searchVersion;if(pendingSearch!=null)searchHandler.removeCallbacks(pendingSearch);String q=t.toString().trim();if(q.length()<3){suggestionBox.removeAllViews();return;}pendingSearch=()->searchDestinations(q,id);searchHandler.postDelayed(pendingSearch,550);}public void afterTextChanged(Editable e){}});
+ label("FIELD MODE — MARK • FIND • TRACK",14);
  name=new EditText(this);name.setHint("Nama batu / titik (contoh: Batu 01)");page.addView(name);
  markType=new Spinner(this);markType.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"START — Lokasi mula","CHECKPOINT — Persinggahan","BOUNDARY — Batu sempadan","END — Lokasi akhir"}));page.addView(markType);
  markProgressLabel=label("MARK POINT: Sedia • Jangan bergerak semasa cerapan",15);
@@ -28,8 +39,8 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  button("MY TRAILS — SEJARAH PERJALANAN",()->showTrails());
  button("SIMPAN SESI TRAIL SEKARANG",()->saveTrail());
  metrics=label("Heading --° | Course --° | Bearing --°",18);
- realMap=new MapView(this);realMap.setTileSource(TileSourceFactory.MAPNIK);realMap.setMultiTouchControls(true);realMap.getController().setZoom(16.0);navigationOverlay=new NavigationOverlay();realMap.getOverlays().add(navigationOverlay);page.addView(realMap,new LinearLayout.LayoutParams(-1,850));
-  map3d=new org.maplibre.android.maps.MapView(this);map3d.onCreate(b);page.addView(map3d,new LinearLayout.LayoutParams(-1,850));map3d.setVisibility(View.GONE);
+ realMap=new MapView(this);realMap.setTileSource(TileSourceFactory.MAPNIK);realMap.setMultiTouchControls(true);realMap.getController().setZoom(16.0);navigationOverlay=new NavigationOverlay();realMap.getOverlays().add(navigationOverlay);mapRoot.addView(realMap,new FrameLayout.LayoutParams(-1,-1));
+  map3d=new org.maplibre.android.maps.MapView(this);map3d.onCreate(b);mapRoot.addView(map3d,new FrameLayout.LayoutParams(-1,-1));map3d.setVisibility(View.GONE);
   map3d.getMapAsync(map->{mapLibre=map;map.setStyle("https://tiles.openfreemap.org/styles/liberty",style->{updateMap();});});
   smartMapStatus=label("SMART MAP: AUTO — 3D >30m, 2D ≤30m, zon carian ≤4m",14);
   button("SMART MAP: AUTO / 2D / 3D",()->{smartMode=smartMode.equals("AUTO")?"2D":smartMode.equals("2D")?"3D":"AUTO";updateMap();});
@@ -38,8 +49,50 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  label("▲ BIRU = SAYA DI SINI    ● MERAH = SASARAN",14);label("© OpenStreetMap contributors (ODbL)",12);
  status=label("Peta jalan sebenar OpenStreetMap. Internet diperlukan untuk tile baharu; kawasan yang pernah dilihat mungkin tersedia dalam cache. Bukan satelit atau 3D.",14);
  label("Pin sasaran kekal. Bacaan GPS boleh tersasar beberapa meter; bukan pengesahan sempadan sah.",13);
+ // Full-screen map: move the existing autocomplete UI above the map without duplicating its listeners.
+ page.removeView(destinationInput);page.removeView(suggestionBox);page.removeView(routeInfo);
+ floatingSearch.addView(destinationInput,new LinearLayout.LayoutParams(-1,dp(50)));
+ floatingSearch.addView(suggestionBox);
+ floatingSearch.addView(routeInfo);
+ FrameLayout.LayoutParams searchParams=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);searchParams.setMargins(dp(12),dp(12),dp(12),0);mapRoot.addView(floatingSearch,searchParams);
+ LinearLayout bottomBar=new LinearLayout(this);bottomBar.setOrientation(LinearLayout.HORIZONTAL);bottomBar.setPadding(dp(8),dp(7),dp(8),dp(7));bottomBar.setBackground(makePanelBackground());
+ Button follow=new Button(this);follow.setText("◎ SAYA");follow.setAllCaps(false);bottomBar.addView(follow,new LinearLayout.LayoutParams(0,dp(50),1));follow.setOnClickListener(v->{followGps=true;mapCentered=false;updateMap();});
+ Button mapMode=new Button(this);mapMode.setText("◈ 2D/3D");mapMode.setAllCaps(false);bottomBar.addView(mapMode,new LinearLayout.LayoutParams(0,dp(50),1));mapMode.setOnClickListener(v->{smartMode=smartMode.equals("AUTO")?"2D":smartMode.equals("2D")?"3D":"AUTO";updateMap();});
+ fieldToggle=new Button(this);fieldToggle.setText("☰ MENU");fieldToggle.setAllCaps(false);bottomBar.addView(fieldToggle,new LinearLayout.LayoutParams(0,dp(50),1));fieldToggle.setOnClickListener(v->toggleFieldPanel());
+ FrameLayout.LayoutParams barParams=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);barParams.setMargins(dp(10),0,dp(10),dp(12));mapRoot.addView(bottomBar,barParams);
+ FrameLayout.LayoutParams fieldParams=new FrameLayout.LayoutParams(-1,-1,Gravity.TOP);fieldParams.setMargins(dp(8),dp(100),dp(8),dp(86));mapRoot.addView(fieldScroll,fieldParams);fieldScroll.setVisibility(View.GONE);
+ // Bottom toolbar must stay clickable above the field panel.
+ bottomBar.bringToFront();
  if(getIntent()!=null&&Intent.ACTION_SEND.equals(getIntent().getAction())){String t=getIntent().getStringExtra(Intent.EXTRA_TEXT);if(t!=null){coords.setText(t);parseTarget();}}
  }
+ // Beta uses public demonstration services; replace with contracted services before public launch.
+ void searchDestinations(String q,int id){
+  if(q.trim().length()<3)return;
+  routeInfo.setText("Mencari lokasi: "+q+" ...");
+  new Thread(()->{try{
+   String url="https://photon.komoot.io/api/?q="+URLEncoder.encode(q,"UTF-8")+"&limit=7";
+   JSONObject result=new JSONObject(httpGet(url));JSONArray features=result.optJSONArray("features");
+   ArrayList<String> names=new ArrayList<>();ArrayList<double[]> points=new ArrayList<>();
+   if(features!=null)for(int i=0;i<features.length();i++){
+    JSONObject f=features.optJSONObject(i);if(f==null)continue;JSONObject props=f.optJSONObject("properties");JSONObject geom=f.optJSONObject("geometry");if(props==null||geom==null)continue;
+    JSONArray c=geom.optJSONArray("coordinates");if(c==null||c.length()<2)continue;
+    String n=props.optString("name",props.optString("street","Lokasi"));String city=props.optString("city",props.optString("county",""));String state=props.optString("state","");String country=props.optString("country","");
+    String display=n+(city.isEmpty()?"":", "+city)+(state.isEmpty()?"":", "+state)+(country.isEmpty()?"":", "+country);
+    names.add(display);points.add(new double[]{c.getDouble(1),c.getDouble(0)});
+   }
+   runOnUiThread(()->{if(id!=searchVersion)return;suggestionBox.removeAllViews();routeInfo.setText(names.isEmpty()?"Tiada padanan. Cuba nama tempat yang lebih khusus.":"Pilih salah satu daripada "+names.size()+" cadangan:");for(int i=0;i<names.size();i++){final int k=i;Button b=new Button(this);b.setAllCaps(false);b.setText("📍 "+names.get(i));suggestionBox.addView(b);b.setOnClickListener(v->{destinationName=names.get(k);destinationLat=points.get(k)[0];destinationLon=points.get(k)[1];destinationInput.setText(destinationName);destinationInput.setSelection(destinationInput.length());searchVersion++;suggestionBox.removeAllViews();targetLat=destinationLat;targetLon=destinationLon;persistTarget();coords.setText(String.format(Locale.US,"%.7f, %.7f",targetLat,targetLon));routeInfo.setText("DESTINASI: "+destinationName+"\nTekan LALUAN JALAN RAYA untuk preview.");updateMap();});}});
+  }catch(Exception e){runOnUiThread(()->{if(id==searchVersion)routeInfo.setText("Carian gagal. Semak internet atau cuba lagi: "+e.getMessage());});}}).start();
+ }
+ String httpGet(String url) throws Exception {HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setRequestProperty("User-Agent","JAMSNavigatorPilot/4.1 (Android beta)");c.setConnectTimeout(9000);c.setReadTimeout(9000);try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);return out.toString("UTF-8");}finally{c.disconnect();}}
+ void requestDrivingRoute(){if(Double.isNaN(destinationLat)){routeInfo.setText("Pilih destinasi daripada cadangan dahulu.");return;}if(Double.isNaN(curLat)||Double.isNaN(curLon)){routeInfo.setText("GPS belum mendapat lokasi semasa. Hidupkan lokasi dan tunggu fix GPS.");return;}
+  routeInfo.setText("Mengira laluan jalan raya...");final double fromLat=curLat,fromLon=curLon,toLat=destinationLat,toLon=destinationLon;
+  new Thread(()->{try{String url=String.format(Locale.US,"https://router.project-osrm.org/route/v1/driving/%.7f,%.7f;%.7f,%.7f?overview=full&geometries=geojson&steps=true",fromLon,fromLat,toLon,toLat);JSONObject obj=new JSONObject(httpGet(url));JSONArray routes=obj.optJSONArray("routes");if(routes==null||routes.length()==0)throw new Exception("Tiada laluan ditemui");JSONObject r=routes.getJSONObject(0);JSONArray coordinates=r.getJSONObject("geometry").getJSONArray("coordinates");ArrayList<GeoPoint> pts=new ArrayList<>();for(int i=0;i<coordinates.length();i++){JSONArray pair=coordinates.getJSONArray(i);pts.add(new GeoPoint(pair.getDouble(1),pair.getDouble(0)));}double km=r.optDouble("distance")/1000.0;int minutes=(int)Math.round(r.optDouble("duration")/60.0);
+   runOnUiThread(()->{if(driveRoute!=null)realMap.getOverlays().remove(driveRoute);driveRoute=new Polyline();driveRoute.setPoints(pts);driveRoute.getOutlinePaint().setColor(Color.rgb(25,110,240));driveRoute.getOutlinePaint().setStrokeWidth(12f);realMap.getOverlays().add(driveRoute);realMap.getController().setCenter(new GeoPoint(fromLat,fromLon));realMap.getController().setZoom(12.0);followGps=false;realMap.setVisibility(View.VISIBLE);map3d.setVisibility(View.GONE);smartMode="2D";realMap.invalidate();routeInfo.setText(String.format(Locale.US,"LALUAN: %s\nJarak %.1f km • Anggaran %d min (tanpa trafik langsung).\nPREVIEW sahaja — belum ada arahan belok demi belok.",destinationName,km,minutes));});
+  }catch(Exception e){runOnUiThread(()->routeInfo.setText("Gagal kira laluan: "+e.getMessage()+". Server demo mungkin sibuk."));}}).start();
+ }
+ int dp(int n){return (int)(n*getResources().getDisplayMetrics().density+0.5f);}
+ android.graphics.drawable.GradientDrawable makePanelBackground(){android.graphics.drawable.GradientDrawable bg=new android.graphics.drawable.GradientDrawable();bg.setColor(Color.WHITE);bg.setCornerRadius(dp(18));bg.setStroke(dp(1),Color.rgb(215,224,220));return bg;}
+ void toggleFieldPanel(){boolean open=fieldScroll.getVisibility()!=View.VISIBLE;fieldScroll.setVisibility(open?View.VISIBLE:View.GONE);fieldToggle.setText(open?"✕ TUTUP":"☰ MENU");if(open){fieldScroll.bringToFront();floatingSearch.bringToFront();fieldToggle.bringToFront();}else{floatingSearch.bringToFront();}}
  TextView label(String t,int size){TextView v=new TextView(this);v.setText(t);v.setTextColor(Color.rgb(19,43,39));v.setTextSize(size);v.setPadding(0,10,0,10);page.addView(v);return v;}
  void button(String t,Runnable r){Button b=new Button(this);b.setText(t);page.addView(b);b.setOnClickListener(v->r.run());}
  Button modeButton(String title,Runnable r){Button b=new Button(this);b.setAllCaps(false);page.addView(b);b.setOnClickListener(v->r.run());return b;}
