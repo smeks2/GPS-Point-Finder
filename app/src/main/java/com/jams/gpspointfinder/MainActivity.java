@@ -11,7 +11,7 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  mapRoot=new FrameLayout(this);mapRoot.setBackgroundColor(Color.rgb(225,235,228));setContentView(mapRoot);
  fieldScroll=new ScrollView(this);fieldScroll.setFillViewport(false);fieldScroll.setBackgroundColor(Color.WHITE);page=new LinearLayout(this);page.setPadding(dp(14),dp(12),dp(14),dp(16));page.setOrientation(1);page.setBackgroundColor(Color.WHITE);fieldScroll.addView(page);
  floatingSearch=new LinearLayout(this);floatingSearch.setOrientation(1);floatingSearch.setPadding(dp(10),dp(7),dp(10),dp(7));floatingSearch.setBackground(makePanelBackground());
- label("JAMS NAVIGATOR v4.3 — NAVIGATION BETA",22);
+ label("JAMS NAVIGATOR v4.3.1 - NAVIGATION BETA",22);
  label("DRIVE MODE — Taip destinasi untuk melihat cadangan tempat",16);
  destinationInput=new EditText(this);destinationInput.setSingleLine(true);destinationInput.setHint("🔍 Cari destinasi: bandar, jalan, kedai, sekolah...");page.addView(destinationInput);
  suggestionBox=new LinearLayout(this);suggestionBox.setOrientation(1);page.addView(suggestionBox);
