@@ -11,7 +11,7 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  mapRoot=new FrameLayout(this);mapRoot.setBackgroundColor(Color.rgb(225,235,228));setContentView(mapRoot);
  fieldScroll=new ScrollView(this);fieldScroll.setFillViewport(false);fieldScroll.setBackgroundColor(Color.WHITE);page=new LinearLayout(this);page.setPadding(dp(14),dp(12),dp(14),dp(16));page.setOrientation(1);page.setBackgroundColor(Color.WHITE);fieldScroll.addView(page);
  floatingSearch=new LinearLayout(this);floatingSearch.setOrientation(1);floatingSearch.setPadding(dp(10),dp(7),dp(10),dp(7));floatingSearch.setBackground(makePanelBackground());
- label("JAMS NAVIGATOR v4.3.2 - SAFE UI BETA",22);
+ label("JAMS NAVIGATOR v4.3.3 - SEARCH & CONTROLS BETA",22);
  label("DRIVE MODE — Taip destinasi untuk melihat cadangan tempat",16);
  destinationInput=new EditText(this);destinationInput.setSingleLine(true);destinationInput.setHint("🔍 Cari destinasi: bandar, jalan, kedai, sekolah...");page.addView(destinationInput);
  suggestionBox=new LinearLayout(this);suggestionBox.setOrientation(1);page.addView(suggestionBox);
@@ -20,7 +20,7 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  button("KIRA LALUAN",()->requestDrivingRoute());
  startNavigationButton=modeButton("▶ START NAVIGATION",()->startNavigation());startNavigationButton.setVisibility(View.GONE);
  stopNavigationButton=modeButton("■ STOP NAVIGATION",()->stopNavigation());stopNavigationButton.setVisibility(View.GONE);
- destinationInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence t,int start,int count,int after){}public void onTextChanged(CharSequence t,int start,int before,int count){int id=++searchVersion;if(pendingSearch!=null)searchHandler.removeCallbacks(pendingSearch);String q=t.toString().trim();if(q.length()<3){suggestionBox.removeAllViews();return;}pendingSearch=()->searchDestinations(q,id);searchHandler.postDelayed(pendingSearch,550);}public void afterTextChanged(Editable e){}});
+ destinationInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence t,int start,int count,int after){}public void onTextChanged(CharSequence t,int start,int before,int count){int id=++searchVersion;if(pendingSearch!=null)searchHandler.removeCallbacks(pendingSearch);String q=t.toString().trim();if(q.length()<3){suggestionBox.removeAllViews();return;}routeInfo.setText("Tekan CARI untuk mencari: "+q);}public void afterTextChanged(Editable e){}});
  label("FIELD MODE — MARK • FIND • TRACK",14);
  name=new EditText(this);name.setHint("Nama batu / titik (contoh: Batu 01)");page.addView(name);
  markType=new Spinner(this);markType.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"START — Lokasi mula","CHECKPOINT — Persinggahan","BOUNDARY — Batu sempadan","END — Lokasi akhir"}));page.addView(markType);
@@ -54,6 +54,7 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  // Full-screen map: move the existing autocomplete UI above the map without duplicating its listeners.
  page.removeView(destinationInput);page.removeView(suggestionBox);page.removeView(routeInfo);
  floatingSearch.addView(destinationInput,new LinearLayout.LayoutParams(-1,dp(50)));
+ Button searchNow=new Button(this);searchNow.setText("⌕ CARI TEMPAT");searchNow.setAllCaps(false);searchNow.setOnClickListener(v->{android.view.inputmethod.InputMethodManager im=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);im.hideSoftInputFromWindow(destinationInput.getWindowToken(),0);searchDestinations(destinationInput.getText().toString(),++searchVersion);});floatingSearch.addView(searchNow,new LinearLayout.LayoutParams(-1,dp(46)));
  floatingSearch.addView(suggestionBox);
  floatingSearch.addView(routeInfo);
  searchParams=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);mapRoot.addView(floatingSearch,searchParams);
@@ -78,21 +79,48 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  }
  // Beta uses public demonstration services; replace with contracted services before public launch.
  void searchDestinations(String q,int id){
-  if(q.trim().length()<3)return;
-  routeInfo.setText("Mencari lokasi: "+q+" ...");
-  new Thread(()->{try{
-   String url="https://photon.komoot.io/api/?q="+URLEncoder.encode(q,"UTF-8")+"&limit=7&lat=6.7&lon=116.8";
-   JSONObject result=new JSONObject(httpGet(url));JSONArray features=result.optJSONArray("features");
+  q=q.trim();if(q.length()<3){routeInfo.setText("Taip sekurang-kurangnya 3 aksara.");return;}
+  final String query=q;
+  routeInfo.setText("Mencari: "+query+" ...");
+  new Thread(()->{
    ArrayList<String> names=new ArrayList<>();ArrayList<double[]> points=new ArrayList<>();
-   if(features!=null)for(int i=0;i<features.length();i++){
-    JSONObject f=features.optJSONObject(i);if(f==null)continue;JSONObject props=f.optJSONObject("properties");JSONObject geom=f.optJSONObject("geometry");if(props==null||geom==null)continue;
-    JSONArray c=geom.optJSONArray("coordinates");if(c==null||c.length()<2)continue;
-    String n=props.optString("name",props.optString("street","Lokasi"));String city=props.optString("city",props.optString("county",""));String state=props.optString("state","");String country=props.optString("country","");
-    String display=n+(city.isEmpty()?"":", "+city)+(state.isEmpty()?"":", "+state)+(country.isEmpty()?"":", "+country);
-    names.add(display);points.add(new double[]{c.getDouble(1),c.getDouble(0)});
-   }
-   runOnUiThread(()->{if(id!=searchVersion)return;suggestionBox.removeAllViews();routeInfo.setText(names.isEmpty()?"Tiada padanan. Cuba nama tempat yang lebih khusus.":"Pilih salah satu daripada "+names.size()+" cadangan:");for(int i=0;i<names.size();i++){final int k=i;Button b=new Button(this);b.setAllCaps(false);b.setText("📍 "+names.get(i));suggestionBox.addView(b);b.setOnClickListener(v->{destinationName=names.get(k);destinationLat=points.get(k)[0];destinationLon=points.get(k)[1];destinationInput.setText(destinationName);destinationInput.setSelection(destinationInput.length());searchVersion++;suggestionBox.removeAllViews();targetLat=destinationLat;targetLon=destinationLon;persistTarget();coords.setText(String.format(Locale.US,"%.7f, %.7f",targetLat,targetLon));routeInfo.setText("DESTINASI: "+destinationName+"\nTekan KIRA LALUAN kemudian START NAVIGATION.");updateMap();});}});
-  }catch(Exception e){runOnUiThread(()->{if(id==searchVersion)routeInfo.setText("Carian gagal. Semak internet atau cuba lagi: "+e.getMessage());});}}).start();
+   String error="";
+   try{
+    // Photon is the primary source. Discard overseas results for Malaysian searches.
+    String url="https://photon.komoot.io/api/?q="+URLEncoder.encode(query,"UTF-8")+"&limit=20&lat=6.7&lon=116.8";
+    JSONObject result=new JSONObject(httpGet(url));JSONArray features=result.optJSONArray("features");
+    if(features!=null)for(int i=0;i<features.length();i++){
+     JSONObject f=features.optJSONObject(i);if(f==null)continue;JSONObject props=f.optJSONObject("properties"),geom=f.optJSONObject("geometry");if(props==null||geom==null)continue;
+     JSONArray c=geom.optJSONArray("coordinates");if(c==null||c.length()<2)continue;
+     double lat=c.optDouble(1),lon=c.optDouble(0);
+     String country=props.optString("country","");
+     if(!country.equalsIgnoreCase("Malaysia")&&!country.equalsIgnoreCase("MY")&&!(lat>=0.8&&lat<=7.6&&lon>=99.5&&lon<=119.5))continue;
+     String n=props.optString("name",props.optString("street","Lokasi"));String city=props.optString("city",props.optString("county",""));String state=props.optString("state","");
+     String display=n+(city.isEmpty()?"":", "+city)+(state.isEmpty()?"":", "+state)+", Malaysia";
+     names.add(display);points.add(new double[]{lat,lon});
+    }
+   }catch(Exception ex){error=ex.getClass().getSimpleName()+": "+ex.getMessage();}
+   // Fallback only on explicit button press. Avoid autocomplete calls to public Nominatim.
+   if(names.isEmpty())try{
+    String nq=query.toLowerCase(Locale.ROOT).contains("malaysia")?query:query+", Sabah, Malaysia";
+    String url="https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=my&limit=7&q="+URLEncoder.encode(nq,"UTF-8");
+    JSONArray results=new JSONArray(httpGet(url));
+    for(int i=0;i<results.length();i++){
+     JSONObject item=results.optJSONObject(i);if(item==null)continue;
+     names.add(item.optString("display_name","Lokasi"));points.add(new double[]{item.getDouble("lat"),item.getDouble("lon")});
+    }
+   }catch(Exception ex){error=error+"; alternatif: "+ex.getClass().getSimpleName();}
+   final String err=error;
+   runOnUiThread(()->{
+    if(id!=searchVersion)return;suggestionBox.removeAllViews();
+    if(names.isEmpty()){routeInfo.setText("Tiada hasil carian. Cuba 'Sikuati II, Kudat' atau semak sambungan. "+(err.isEmpty()?"":err));return;}
+    routeInfo.setText("Pilih destinasi ("+Math.min(6,names.size())+" cadangan Malaysia):");
+    for(int i=0;i<Math.min(6,names.size());i++){
+     final int k=i;Button b=new Button(this);b.setAllCaps(false);b.setText("📍 "+names.get(i));suggestionBox.addView(b);
+     b.setOnClickListener(v->{destinationName=names.get(k);destinationLat=points.get(k)[0];destinationLon=points.get(k)[1];destinationInput.setText(destinationName);destinationInput.setSelection(destinationInput.length());searchVersion++;suggestionBox.removeAllViews();targetLat=destinationLat;targetLon=destinationLon;persistTarget();coords.setText(String.format(Locale.US,"%.7f, %.7f",targetLat,targetLon));routeInfo.setText("DESTINASI: "+destinationName+"\nBuka MENU > KIRA LALUAN, kemudian START NAVIGATION.");updateMap();});
+    }
+   });
+  }).start();
  }
  String httpGet(String url) throws Exception {HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setRequestProperty("User-Agent","JAMSNavigatorPilot/4.3.2 (Android beta)");c.setConnectTimeout(9000);c.setReadTimeout(9000);try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);return out.toString("UTF-8");}finally{c.disconnect();}}
  void requestDrivingRoute(){fetchRoute(false);}
@@ -177,10 +205,10 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  void positionFloatingControls(){
   if(searchParams==null||barParams==null||fieldParams==null||navParams==null)return;
   int left=safeLeft+dp(16),right=safeRight+dp(16);
-  searchParams.setMargins(left,safeTop+dp(12),right,0);floatingSearch.setLayoutParams(searchParams);
-  barParams.setMargins(left,0,right,safeBottom+dp(16));
-  fieldParams.setMargins(left,safeTop+dp(104),right,safeBottom+dp(100));fieldScroll.setLayoutParams(fieldParams);
-  navParams.setMargins(left,0,right,safeBottom+dp(100));navigationCard.setLayoutParams(navParams);
+  searchParams.setMargins(left,safeTop+dp(16),right,0);floatingSearch.setLayoutParams(searchParams);
+  barParams.setMargins(left,0,right,safeBottom+dp(20));
+  fieldParams.setMargins(left,safeTop+dp(160),right,safeBottom+dp(110));fieldScroll.setLayoutParams(fieldParams);
+  navParams.setMargins(left,0,right,safeBottom+dp(112));navigationCard.setLayoutParams(navParams);
   // The top search card can grow for suggestions, while navigation remains above the toolbar.
  }
  void showNavigationControls(){
