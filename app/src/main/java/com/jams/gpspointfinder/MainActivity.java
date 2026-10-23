@@ -1,7 +1,7 @@
 package com.jams.gpspointfinder;
 import android.Manifest;import android.speech.tts.TextToSpeech;import android.text.*;import java.net.*;import java.io.*;import java.util.concurrent.*;import android.app.*;import android.content.*;import android.content.pm.*;import android.graphics.*;import android.hardware.*;import android.location.*;import android.os.*;import android.view.*;import android.widget.*;import org.json.*;import java.util.*;import java.util.regex.*;import org.osmdroid.config.Configuration;import org.osmdroid.tileprovider.tilesource.TileSourceFactory;import org.osmdroid.views.MapView;import org.osmdroid.views.overlay.Marker;import org.osmdroid.views.overlay.Polyline;import org.osmdroid.util.GeoPoint;import org.osmdroid.views.overlay.Overlay;import org.maplibre.android.MapLibre;import org.maplibre.android.maps.MapLibreMap;import org.maplibre.android.camera.CameraPosition;import org.maplibre.android.camera.CameraUpdateFactory;import org.maplibre.android.geometry.LatLng;import org.maplibre.android.annotations.MarkerOptions;import org.maplibre.android.annotations.IconFactory;
 public class MainActivity extends Activity implements SensorEventListener,LocationListener {
- EditText destinationInput;LinearLayout suggestionBox;TextView routeInfo;Handler searchHandler=new Handler(Looper.getMainLooper());Runnable pendingSearch;int searchVersion=0;Polyline driveRoute;boolean navigationActive=false,routeBusy=false;long lastRerouteAt=0;int offRouteSamples=0,nextStepIndex=0;double routeDistanceMeters=0,routeDurationSeconds=0;int routeSegment=0;ArrayList<GeoPoint> navigationPoints=new ArrayList<>();ArrayList<NavStep> navigationSteps=new ArrayList<>();TextToSpeech tts;boolean voiceReady=false;Button startNavigationButton,stopNavigationButton;static class NavStep {double lat,lon,distance;String instruction;NavStep(double a,double b,double d,String i){lat=a;lon=b;distance=d;instruction=i;}}double destinationLat=Double.NaN,destinationLon=Double.NaN;String destinationName="";
+ EditText destinationInput;LinearLayout suggestionBox;TextView routeInfo;Handler searchHandler=new Handler(Looper.getMainLooper());Runnable pendingSearch;int searchVersion=0;Polyline driveRoute;boolean navigationActive=false,routeBusy=false;long lastRerouteAt=0;int offRouteSamples=0,nextStepIndex=0;double routeDistanceMeters=0,routeDurationSeconds=0;int routeSegment=0;ArrayList<GeoPoint> navigationPoints=new ArrayList<>();ArrayList<NavStep> navigationSteps=new ArrayList<>();TextToSpeech tts;boolean voiceReady=false;Button startNavigationButton,stopNavigationButton;LinearLayout navigationCard;Button floatingStart,floatingStop;FrameLayout.LayoutParams searchParams,barParams,fieldParams,navParams;int safeTop=0,safeBottom=0,safeLeft=0,safeRight=0;static class NavStep {double lat,lon,distance;String instruction;NavStep(double a,double b,double d,String i){lat=a;lon=b;distance=d;instruction=i;}}double destinationLat=Double.NaN,destinationLon=Double.NaN;String destinationName="";
  FrameLayout mapRoot;ScrollView fieldScroll;LinearLayout floatingSearch;Button fieldToggle;LinearLayout page;TextView metrics,status,modeStatus,markProgressLabel;ProgressBar markProgress;Spinner markType;Button findButton,recordButton,beepButton;boolean findOn=false,recordOn=false,beepOn=false;EditText coords,name;Spinner saved;MapView realMap;org.maplibre.android.maps.MapView map3d;MapLibreMap mapLibre;org.maplibre.android.annotations.Marker blue3d,red3d;TextView smartMapStatus;String smartMode="AUTO";boolean near2d=false;Marker targetMarker,userMarker;Polyline routeLine;boolean mapCentered=false,followGps=true;Overlay navigationOverlay;SensorManager sm;Sensor rotation;LocationManager lm;PointStore store;
  double targetLat=Double.NaN,targetLon=Double.NaN,heading=Double.NaN,curLat=Double.NaN,curLon=Double.NaN;float bearing=Float.NaN,course=Float.NaN,accuracy=Float.NaN,distance=-1,total=0;double altitude=Double.NaN;
  boolean measuring=false;boolean liveGpsSubscribed=false;long lastGpsFix=0;long started=0;ArrayList<Location> samples=new ArrayList<>();Handler handler=new Handler(Looper.getMainLooper());
@@ -11,15 +11,15 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  mapRoot=new FrameLayout(this);mapRoot.setBackgroundColor(Color.rgb(225,235,228));setContentView(mapRoot);
  fieldScroll=new ScrollView(this);fieldScroll.setFillViewport(false);fieldScroll.setBackgroundColor(Color.WHITE);page=new LinearLayout(this);page.setPadding(dp(14),dp(12),dp(14),dp(16));page.setOrientation(1);page.setBackgroundColor(Color.WHITE);fieldScroll.addView(page);
  floatingSearch=new LinearLayout(this);floatingSearch.setOrientation(1);floatingSearch.setPadding(dp(10),dp(7),dp(10),dp(7));floatingSearch.setBackground(makePanelBackground());
- label("JAMS NAVIGATOR v4.3.1 - NAVIGATION BETA",22);
+ label("JAMS NAVIGATOR v4.3.2 - SAFE UI BETA",22);
  label("DRIVE MODE — Taip destinasi untuk melihat cadangan tempat",16);
  destinationInput=new EditText(this);destinationInput.setSingleLine(true);destinationInput.setHint("🔍 Cari destinasi: bandar, jalan, kedai, sekolah...");page.addView(destinationInput);
  suggestionBox=new LinearLayout(this);suggestionBox.setOrientation(1);page.addView(suggestionBox);
  routeInfo=label("Cari tempat, pilih cadangan, kemudian tekan LALUAN JALAN RAYA.",14);
  button("CARI DESTINASI",()->searchDestinations(destinationInput.getText().toString(),++searchVersion));
  button("KIRA LALUAN",()->requestDrivingRoute());
- startNavigationButton=modeButton("▶ START NAVIGATION",()->startNavigation());
- stopNavigationButton=modeButton("■ STOP NAVIGATION",()->stopNavigation());
+ startNavigationButton=modeButton("▶ START NAVIGATION",()->startNavigation());startNavigationButton.setVisibility(View.GONE);
+ stopNavigationButton=modeButton("■ STOP NAVIGATION",()->stopNavigation());stopNavigationButton.setVisibility(View.GONE);
  destinationInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence t,int start,int count,int after){}public void onTextChanged(CharSequence t,int start,int before,int count){int id=++searchVersion;if(pendingSearch!=null)searchHandler.removeCallbacks(pendingSearch);String q=t.toString().trim();if(q.length()<3){suggestionBox.removeAllViews();return;}pendingSearch=()->searchDestinations(q,id);searchHandler.postDelayed(pendingSearch,550);}public void afterTextChanged(Editable e){}});
  label("FIELD MODE — MARK • FIND • TRACK",14);
  name=new EditText(this);name.setHint("Nama batu / titik (contoh: Batu 01)");page.addView(name);
@@ -56,15 +56,23 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  floatingSearch.addView(destinationInput,new LinearLayout.LayoutParams(-1,dp(50)));
  floatingSearch.addView(suggestionBox);
  floatingSearch.addView(routeInfo);
- FrameLayout.LayoutParams searchParams=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);searchParams.setMargins(dp(12),dp(12),dp(12),0);mapRoot.addView(floatingSearch,searchParams);
+ searchParams=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);mapRoot.addView(floatingSearch,searchParams);
  LinearLayout bottomBar=new LinearLayout(this);bottomBar.setOrientation(LinearLayout.HORIZONTAL);bottomBar.setPadding(dp(8),dp(7),dp(8),dp(7));bottomBar.setBackground(makePanelBackground());
  Button follow=new Button(this);follow.setText("◎ SAYA");follow.setAllCaps(false);bottomBar.addView(follow,new LinearLayout.LayoutParams(0,dp(50),1));follow.setOnClickListener(v->{followGps=true;mapCentered=false;updateMap();});
  Button mapMode=new Button(this);mapMode.setText("◈ 2D/3D");mapMode.setAllCaps(false);bottomBar.addView(mapMode,new LinearLayout.LayoutParams(0,dp(50),1));mapMode.setOnClickListener(v->{smartMode=smartMode.equals("AUTO")?"2D":smartMode.equals("2D")?"3D":"AUTO";updateMap();});
  fieldToggle=new Button(this);fieldToggle.setText("☰ MENU");fieldToggle.setAllCaps(false);bottomBar.addView(fieldToggle,new LinearLayout.LayoutParams(0,dp(50),1));fieldToggle.setOnClickListener(v->toggleFieldPanel());
- FrameLayout.LayoutParams barParams=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);barParams.setMargins(dp(10),0,dp(10),dp(12));mapRoot.addView(bottomBar,barParams);
- FrameLayout.LayoutParams fieldParams=new FrameLayout.LayoutParams(-1,-1,Gravity.TOP);fieldParams.setMargins(dp(8),dp(100),dp(8),dp(86));mapRoot.addView(fieldScroll,fieldParams);fieldScroll.setVisibility(View.GONE);
+ barParams=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);mapRoot.addView(bottomBar,barParams);
+ fieldParams=new FrameLayout.LayoutParams(-1,-1,Gravity.TOP);mapRoot.addView(fieldScroll,fieldParams);fieldScroll.setVisibility(View.GONE);
+ navigationCard=new LinearLayout(this);navigationCard.setOrientation(1);navigationCard.setPadding(dp(12),dp(8),dp(12),dp(8));navigationCard.setBackground(makePanelBackground());
+ floatingStart=new Button(this);floatingStart.setAllCaps(false);floatingStart.setText("▶ START NAVIGATION");floatingStart.setMinHeight(dp(52));floatingStart.setOnClickListener(v->startNavigation());navigationCard.addView(floatingStart,new LinearLayout.LayoutParams(-1,dp(54)));
+ floatingStop=new Button(this);floatingStop.setAllCaps(false);floatingStop.setText("■ STOP NAVIGATION");floatingStop.setMinHeight(dp(52));floatingStop.setOnClickListener(v->stopNavigation());navigationCard.addView(floatingStop,new LinearLayout.LayoutParams(-1,dp(54)));floatingStop.setVisibility(View.GONE);
+ navParams=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);mapRoot.addView(navigationCard,navParams);navigationCard.setVisibility(View.GONE);
+ // Respect status/navigation bars, display cutouts and gesture navigation on every device.
+ if(android.os.Build.VERSION.SDK_INT>=29){mapRoot.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets sys=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());safeTop=sys.top;safeBottom=sys.bottom;safeLeft=sys.left;safeRight=sys.right;positionFloatingControls();return insets;});mapRoot.requestApplyInsets();}
+ else {mapRoot.setOnApplyWindowInsetsListener((view,insets)->{safeTop=insets.getSystemWindowInsetTop();safeBottom=insets.getSystemWindowInsetBottom();safeLeft=insets.getSystemWindowInsetLeft();safeRight=insets.getSystemWindowInsetRight();positionFloatingControls();return insets;});mapRoot.requestApplyInsets();}
+ positionFloatingControls();
  // Bottom toolbar must stay clickable above the field panel.
- bottomBar.bringToFront();
+ bottomBar.bringToFront();navigationCard.bringToFront();
  tts=new TextToSpeech(this,result->{voiceReady=result==TextToSpeech.SUCCESS;if(voiceReady)tts.setLanguage(new Locale("ms","MY"));});
  if(getIntent()!=null&&Intent.ACTION_SEND.equals(getIntent().getAction())){String t=getIntent().getStringExtra(Intent.EXTRA_TEXT);if(t!=null){coords.setText(t);parseTarget();}}
  }
@@ -86,7 +94,7 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
    runOnUiThread(()->{if(id!=searchVersion)return;suggestionBox.removeAllViews();routeInfo.setText(names.isEmpty()?"Tiada padanan. Cuba nama tempat yang lebih khusus.":"Pilih salah satu daripada "+names.size()+" cadangan:");for(int i=0;i<names.size();i++){final int k=i;Button b=new Button(this);b.setAllCaps(false);b.setText("📍 "+names.get(i));suggestionBox.addView(b);b.setOnClickListener(v->{destinationName=names.get(k);destinationLat=points.get(k)[0];destinationLon=points.get(k)[1];destinationInput.setText(destinationName);destinationInput.setSelection(destinationInput.length());searchVersion++;suggestionBox.removeAllViews();targetLat=destinationLat;targetLon=destinationLon;persistTarget();coords.setText(String.format(Locale.US,"%.7f, %.7f",targetLat,targetLon));routeInfo.setText("DESTINASI: "+destinationName+"\nTekan KIRA LALUAN kemudian START NAVIGATION.");updateMap();});}});
   }catch(Exception e){runOnUiThread(()->{if(id==searchVersion)routeInfo.setText("Carian gagal. Semak internet atau cuba lagi: "+e.getMessage());});}}).start();
  }
- String httpGet(String url) throws Exception {HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setRequestProperty("User-Agent","JAMSNavigatorPilot/4.1 (Android beta)");c.setConnectTimeout(9000);c.setReadTimeout(9000);try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);return out.toString("UTF-8");}finally{c.disconnect();}}
+ String httpGet(String url) throws Exception {HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setRequestProperty("User-Agent","JAMSNavigatorPilot/4.3.2 (Android beta)");c.setConnectTimeout(9000);c.setReadTimeout(9000);try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);return out.toString("UTF-8");}finally{c.disconnect();}}
  void requestDrivingRoute(){fetchRoute(false);}
  void fetchRoute(boolean reroute){
   if(routeBusy)return;
@@ -110,8 +118,8 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
    runOnUiThread(()->{routeBusy=false;navigationPoints=pts;navigationSteps=steps;nextStepIndex=0;routeSegment=0;offRouteSamples=0;routeDistanceMeters=dist;routeDurationSeconds=dur;
     if(driveRoute!=null)realMap.getOverlays().remove(driveRoute);driveRoute=new Polyline();driveRoute.setPoints(pts);driveRoute.getOutlinePaint().setColor(Color.rgb(25,110,240));driveRoute.getOutlinePaint().setStrokeWidth(12f);realMap.getOverlays().add(driveRoute);
     followGps=true;smartMode="2D";realMap.setVisibility(View.VISIBLE);map3d.setVisibility(View.GONE);realMap.getController().setZoom(17.0);realMap.invalidate();
-    if(reroute&&navigationActive){speak("Laluan baharu tersedia");updateNavigation();}
-    else routeInfo.setText(String.format(Locale.US,"LALUAN KE %s\n%.1f km • ±%d min (tiada trafik langsung). Tekan START NAVIGATION.",destinationName,dist/1000,(int)Math.round(dur/60)));
+    if(reroute&&navigationActive){showNavigationControls();speak("Laluan baharu tersedia");updateNavigation();}
+    else {routeInfo.setText(String.format(Locale.US,"LALUAN KE %s\n%.1f km • ±%d min (tiada trafik langsung). Tekan START NAVIGATION.",destinationName,dist/1000,(int)Math.round(dur/60)));showNavigationControls();}
    });
   }catch(Exception e){runOnUiThread(()->{routeBusy=false;routeInfo.setText("Gagal mendapatkan laluan: "+e.getMessage()+". Cuba lagi.");});}}).start();
  }
@@ -132,9 +140,9 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  void startNavigation(){
   if(navigationPoints.size()<2||navigationSteps.isEmpty()){routeInfo.setText("Kira laluan dahulu sebelum START.");return;}
   if(Double.isNaN(curLat)){routeInfo.setText("Tunggu GPS sebelum START.");return;}
-  navigationActive=true;nextStepIndex=0;routeSegment=0;offRouteSamples=0;followGps=true;smartMode="2D";speak("Navigasi bermula");updateNavigation();
+  navigationActive=true;showNavigationControls();fieldScroll.setVisibility(View.GONE);fieldToggle.setText("☰ MENU");nextStepIndex=0;routeSegment=0;offRouteSamples=0;followGps=true;smartMode="2D";speak("Navigasi bermula");updateNavigation();
  }
- void stopNavigation(){navigationActive=false;offRouteSamples=0;if(tts!=null)tts.stop();routeInfo.setText("Navigasi dihentikan. Laluan masih dipaparkan.");}
+ void stopNavigation(){navigationActive=false;showNavigationControls();offRouteSamples=0;if(tts!=null)tts.stop();routeInfo.setText("Navigasi dihentikan. Laluan masih dipaparkan.");}
  double meters(double a,double b,double c,double d){float[] out=new float[1];Location.distanceBetween(a,b,c,d,out);return out[0];}
  double routeDeviationMeters(){double best=Double.MAX_VALUE;if(navigationPoints.size()<2)return best;
   for(int i=1;i<navigationPoints.size();i++){GeoPoint a=navigationPoints.get(i-1),b=navigationPoints.get(i);double latScale=111195,lonScale=111195*Math.cos(Math.toRadians(curLat));
@@ -166,7 +174,24 @@ public class MainActivity extends Activity implements SensorEventListener,Locati
  }
  int dp(int n){return (int)(n*getResources().getDisplayMetrics().density+0.5f);}
  android.graphics.drawable.GradientDrawable makePanelBackground(){android.graphics.drawable.GradientDrawable bg=new android.graphics.drawable.GradientDrawable();bg.setColor(Color.WHITE);bg.setCornerRadius(dp(18));bg.setStroke(dp(1),Color.rgb(215,224,220));return bg;}
- void toggleFieldPanel(){boolean open=fieldScroll.getVisibility()!=View.VISIBLE;fieldScroll.setVisibility(open?View.VISIBLE:View.GONE);fieldToggle.setText(open?"✕ TUTUP":"☰ MENU");if(open){fieldScroll.bringToFront();floatingSearch.bringToFront();fieldToggle.bringToFront();}else{floatingSearch.bringToFront();}}
+ void positionFloatingControls(){
+  if(searchParams==null||barParams==null||fieldParams==null||navParams==null)return;
+  int left=safeLeft+dp(16),right=safeRight+dp(16);
+  searchParams.setMargins(left,safeTop+dp(12),right,0);floatingSearch.setLayoutParams(searchParams);
+  barParams.setMargins(left,0,right,safeBottom+dp(16));
+  fieldParams.setMargins(left,safeTop+dp(104),right,safeBottom+dp(100));fieldScroll.setLayoutParams(fieldParams);
+  navParams.setMargins(left,0,right,safeBottom+dp(100));navigationCard.setLayoutParams(navParams);
+  // The top search card can grow for suggestions, while navigation remains above the toolbar.
+ }
+ void showNavigationControls(){
+  if(navigationCard==null)return;
+  boolean hasRoute=navigationPoints.size()>1;
+  navigationCard.setVisibility(hasRoute?View.VISIBLE:View.GONE);
+  floatingStart.setVisibility(navigationActive?View.GONE:View.VISIBLE);
+  floatingStop.setVisibility(navigationActive?View.VISIBLE:View.GONE);
+  navigationCard.bringToFront();
+ }
+ void toggleFieldPanel(){boolean open=fieldScroll.getVisibility()!=View.VISIBLE;fieldScroll.setVisibility(open?View.VISIBLE:View.GONE);fieldToggle.setText(open?"✕ TUTUP":"☰ MENU");if(open){fieldScroll.bringToFront();floatingSearch.bringToFront();fieldToggle.bringToFront();navigationCard.bringToFront();}else{floatingSearch.bringToFront();navigationCard.bringToFront();}}
  TextView label(String t,int size){TextView v=new TextView(this);v.setText(t);v.setTextColor(Color.rgb(19,43,39));v.setTextSize(size);v.setPadding(0,10,0,10);page.addView(v);return v;}
  void button(String t,Runnable r){Button b=new Button(this);b.setText(t);page.addView(b);b.setOnClickListener(v->r.run());}
  Button modeButton(String title,Runnable r){Button b=new Button(this);b.setAllCaps(false);page.addView(b);b.setOnClickListener(v->r.run());return b;}
